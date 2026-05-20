@@ -3097,8 +3097,13 @@ function executeDlDownload() {
 
   setTimeout(() => {
     // CSV escape 처리 (쉼표·줄바꿈·따옴표 포함 시 quoting)
+    // ⭐ 긴 숫자(15자리+)는 Excel 수식 텍스트(="...")로 강제 → 과학적 표기법 방지
     const escapeCsv = (v) => {
       const s = String(v ?? '');
+      // 15자리 이상의 순수 숫자 = 과학적 표기 위험 (예: 세금계산서 승인번호 24자리)
+      if (/^\d{15,}$/.test(s)) return `="${s}"`;
+      // 선행 0이 있는 숫자도 텍스트 보존
+      if (/^0\d+$/.test(s)) return `="${s}"`;
       if (s.includes(',') || s.includes('"') || s.includes('\n')) {
         return '"' + s.replace(/"/g, '""') + '"';
       }
