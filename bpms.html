@@ -2189,7 +2189,7 @@ function runAnalysis() {
     name:'영업현황이름', partner:'시공사', biz1:'사업구분1', biz1d:'사업구분1-상세', biz2:'사업구분2',
     wait_no:'대기번호', ownership:'충전기소유권', capacity:'충전기 용량',
     qty_slow:'충전기 대수(완속)', qty_fast:'충전기 대수(급속)',
-    model:'충전기모델', reg_date:'계약 등록일', sales_date:'영업승인일',
+    model:'충전기모델', inst_type:'설치유형', reg_date:'계약 등록일', sales_date:'영업승인일',
     env_date:'환경부 승인일자', manager:'담당자', year:'사업연도',
   };
   const mappedCols = [];
@@ -2491,6 +2491,7 @@ const DL_STANDARD_FIELDS = [
   { key: 'qty_slow',   label: '충전기 대수(완속)' },
   { key: 'qty_fast',   label: '충전기 대수(급속)' },
   { key: 'model',      label: '충전기모델' },
+  { key: 'inst_type',  label: '설치유형' },
   { key: 'reg_date',   label: '계약 등록일' },
   { key: 'sales_date', label: '영업승인일' },
   { key: 'env_date',   label: '환경부 승인일자' },
