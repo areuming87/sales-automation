@@ -1403,6 +1403,25 @@ function migrateLegacyItemKeys() {
   }
   return changed;
 }
+
+/* 더미 담당자 정리 — 과거 업로드 시 자동으로 채워졌던 "김담당" 값을 빈 값으로 변경
+   (실제 데이터에 김담당이 있으면 사용자가 다시 입력해야 하지만, 현재는 더미라 클리어) */
+function cleanupDummyManager() {
+  const DUMMY = '김담당';
+  let cleared = 0;
+  SAMPLE.forEach(item => {
+    if (item.manager === DUMMY) {
+      item.manager = '';
+      cleared++;
+    }
+  });
+  if (cleared > 0) {
+    saveBpmsData();
+    console.log(`[BPMS] 더미 담당자 ${cleared}건 정리 완료`);
+  }
+  return cleared;
+}
+
 // 마이그레이션은 XLS_COL_MAP 정의된 후 호출 — DOMContentLoaded에서 실행
 
 // 페이지 로드 시 자동: 중복 제거 + 상태 동기화
@@ -2541,7 +2560,8 @@ function applyXlsMatching() {
         wait_no: '', wait_yn: 'N', ownership: '', capacity: '',
         qty_slow: 0, qty_fast: 0, model: '',
         inst_type: '', reg_date: '', sales_date: '', env_date: '',
-        manager: CURRENT_USER, year: String(new Date().getFullYear()),
+        // ⚠ 담당자·연도는 엑셀에 값이 있으면 자동 채워지고, 없으면 빈 값
+        manager: '', year: '',
         reg_status: 'pending',
       };
       Object.keys(n.row).forEach(h => {
@@ -3342,6 +3362,11 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('f_date_to').value   = today.toISOString().slice(0,10);
   // ⭐ 레거시 키 마이그레이션 (XLS_COL_MAP이 정의된 후 안전하게 호출)
   try { migrateLegacyItemKeys(); } catch (e) { console.warn('마이그레이션 스킵:', e); }
+  // ⭐ 더미 담당자(김담당) 정리
+  try {
+    const n = cleanupDummyManager();
+    if (n > 0) setTimeout(() => showToast(`🧹 더미 담당자 "김담당" ${n}건 정리됨`, 4000), 800);
+  } catch (e) { console.warn('담당자 정리 스킵:', e); }
 
   renderSyncBanner();
   renderBell();
