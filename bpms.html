@@ -1418,6 +1418,52 @@ const BIZ1_DETAIL = {
 let filteredData = [];
 let sortKey = '';
 let sortAsc = true;
+
+/* ─────────────────────────────────────────────
+   검색 필터 상태 저장/복원 (담당자별, 새로고침/페이지 이동에도 유지)
+───────────────────────────────────────────── */
+const FILTER_STATE_KEY = () => `bpms_filter_state_${CURRENT_USER}`;
+const FILTER_FIELD_IDS = [
+  'f_year','f_manager','f_partner','f_pjt','f_wait_no',
+  'f_biz1','f_biz1d','f_biz2','f_wait_yn','f_reg_status',
+  'f_date_from','f_date_to',
+];
+
+function saveFilterState(searched = null) {
+  try {
+    const state = {};
+    FILTER_FIELD_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) state[id] = el.value;
+    });
+    // searched=true 면 마지막에 검색버튼 눌렀음을 의미 → 복원 시 자동 재검색
+    const prev = JSON.parse(localStorage.getItem(FILTER_STATE_KEY())) || {};
+    state.searched = searched !== null ? searched : (prev.searched || false);
+    localStorage.setItem(FILTER_STATE_KEY(), JSON.stringify(state));
+  } catch (e) { console.warn('필터 상태 저장 실패:', e); }
+}
+
+function loadFilterState() {
+  try {
+    const state = JSON.parse(localStorage.getItem(FILTER_STATE_KEY()));
+    if (!state) return false;
+    FILTER_FIELD_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && state[id] !== undefined) el.value = state[id];
+    });
+    // 사업구분1이 복원된 경우 → 사업구분1-상세 옵션도 그에 맞게 갱신 후 값 복원
+    if (state.f_biz1) {
+      onBiz1Change(true);
+      // 옵션 다시 그린 후 값 복원
+      const biz1dEl = document.getElementById('f_biz1d');
+      if (biz1dEl && state.f_biz1d !== undefined) biz1dEl.value = state.f_biz1d;
+    }
+    return state.searched === true;
+  } catch (e) {
+    console.warn('필터 상태 복원 실패:', e);
+    return false;
+  }
+}
 let currentPage = 1;
 const PAGE_SIZE = 20;
 
@@ -1558,7 +1604,8 @@ function onBiz1Change(skipFilterChange) {
 }
 
 function onFilterChange() {
-  // 실시간 카운트 업데이트 (검색 전)
+  // 필터 값 바뀌면 즉시 저장 (검색은 안 해도 값은 유지)
+  saveFilterState();
 }
 
 /* ── 검색 ── */
@@ -1600,6 +1647,8 @@ function handleSearch() {
     renderTable();
     document.getElementById('resultCount').textContent = filteredData.length;
     updateTotalCount();
+    // 검색 실행됨 — 상태 저장 (페이지 다시 들어올 때 자동 재검색)
+    saveFilterState(true);
     showToast(`🔍 ${filteredData.length}건 조회되었습니다. (전체 ${SAMPLE.length}건 중)`);
   }, 600);
 }
@@ -1825,6 +1874,8 @@ function resetFilters() {
       </td>
     </tr>`;
   document.getElementById('tableFooter').style.display = 'none';
+  // 저장된 필터 상태도 클리어
+  localStorage.removeItem(FILTER_STATE_KEY());
   showToast('↺ 필터가 초기화되었습니다.');
 }
 
@@ -3221,6 +3272,13 @@ window.addEventListener('DOMContentLoaded', () => {
   updateTotalCount();
   populateFilterOptions();  // ⭐ 실제 데이터로 필터 옵션 채우기
   renderTableHeader();      // ⭐ 사용자 컬럼 설정 적용
+
+  // ⭐ 검색 필터 상태 복원 — 다른 페이지 갔다 와도 유지
+  const wasSearched = loadFilterState();
+  if (wasSearched && SAMPLE.length > 0) {
+    // 이전에 검색했었으면 자동 재실행
+    setTimeout(() => handleSearch(), 100);
+  }
 });
 </script>
 </body>
