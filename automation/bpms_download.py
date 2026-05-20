@@ -121,29 +121,47 @@ def download_report(page, name, url, attempt=1):
         pass
     time.sleep(5)
 
-    # ── 1. 편집 버튼 옆 ▼ (chevron-down) 메뉴 열기
-    print("  🔽 메뉴 버튼 클릭...")
+    # ── 1. 편집 버튼 옆 ▼ 메뉴 열기 (정확하게 — 프로필 메뉴 X)
+    print("  🔽 [편집 옆 ▼] 메뉴 열기...")
     chevron_clicked = False
-    selectors_chevron = [
-        # 편집 버튼 바로 옆에 있는 메뉴 토글 (가장 일반적인 Lightning 패턴)
-        'button[title*="더"][aria-haspopup="true"]',
-        'button[aria-label*="더"][aria-haspopup="true"]',
-        'lightning-button-menu button',
-        'button.slds-button[aria-haspopup="true"]:not([disabled])',
+
+    # Salesforce Lightning report 페이지의 액션 컨테이너 안에서만 메뉴 찾기
+    # XPath: 편집 버튼 → 형제/근접한 lightning-button-menu
+    candidate_selectors = [
+        # 가장 정확: 편집 버튼 직후의 lightning-button-menu의 트리거 버튼
+        ('xpath', '//button[normalize-space(.)="편집"]/following::lightning-button-menu[1]//button'),
+        ('xpath', '//*[normalize-space(.)="편집" and self::button]/parent::*/following-sibling::*[1]//button[@aria-haspopup="menu"]'),
+        # lightning-button-group 안에서 편집과 형제인 메뉴 트리거
+        ('xpath', '//button[normalize-space(.)="편집"]/ancestor::lightning-button-group//button[@aria-haspopup="menu"]'),
+        # 폴백: 보고서 페이지 본문 안의 메뉴 트리거 (사이드바·프로필 제외)
+        ('css', 'div.reportPlatformLanding lightning-button-menu button'),
+        ('css', '[class*="reportActions"] lightning-button-menu button'),
     ]
-    for sel in selectors_chevron:
+
+    for kind, sel in candidate_selectors:
         try:
-            loc = page.locator(sel).last
-            if loc.count() > 0 and loc.is_visible(timeout=2000):
-                loc.click(timeout=5000)
+            loc = page.locator(sel if kind == 'css' else f'xpath={sel}').first
+            if loc.count() == 0:
+                continue
+            if not loc.is_visible(timeout=2000):
+                continue
+            loc.click(timeout=5000)
+            time.sleep(0.8)
+
+            # ⭐ 클릭 후 검증: '내보내기' 메뉴 아이템이 보여야 정상
+            # 안 보이면 잘못된 메뉴 (프로필 등) 열린 것 — ESC로 닫고 다음 시도
+            if page.locator('text=내보내기').first.is_visible(timeout=2000):
                 chevron_clicked = True
-                print(f"     ✓ 메뉴 열림 ({sel})")
+                print(f"     ✓ 보고서 액션 메뉴 열림")
                 break
+            else:
+                print(f"     ⚠ 다른 메뉴가 열렸음 (내보내기 안 보임) — ESC 후 재시도")
+                page.keyboard.press('Escape')
+                time.sleep(0.5)
         except Exception:
             continue
 
     if not chevron_clicked:
-        # 수동 시도 — 사용자가 직접 메뉴 열도록 안내
         print("  ⚠ 자동으로 메뉴를 못 찾았습니다. 브라우저에서 직접:")
         print("     1) 우측 상단 '편집' 옆 ▼ 클릭")
         print("     2) '내보내기' 클릭")
@@ -151,21 +169,20 @@ def download_report(page, name, url, attempt=1):
         input("     완료 후 Enter (다음 보고서로 넘어감)... ")
         return None
 
-    time.sleep(1)
-
     # ── 2. "내보내기" 메뉴 아이템 클릭
-    print("  📤 '내보내기' 클릭...")
+    print("  📤 '내보내기' 메뉴 클릭...")
     try:
-        # 메뉴 아이템은 보통 a 태그 또는 lightning-menu-item 안에 있음
         export_clicked = False
+        # 메뉴 안의 '내보내기' (role=menuitem 우선)
         for sel in [
-            'a:has-text("내보내기")',
             '[role="menuitem"]:has-text("내보내기")',
-            'span:has-text("내보내기")',
+            'lightning-menu-item:has-text("내보내기")',
+            'a[role="menuitem"]:has-text("내보내기")',
+            '//div[@role="menu"]//*[normalize-space(.)="내보내기"]',
         ]:
             try:
-                loc = page.locator(sel).first
-                if loc.count() > 0:
+                loc = (page.locator(f'xpath={sel}') if sel.startswith('//') else page.locator(sel)).first
+                if loc.count() > 0 and loc.is_visible(timeout=2000):
                     loc.click(timeout=5000)
                     export_clicked = True
                     break
