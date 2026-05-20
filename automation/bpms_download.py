@@ -16,13 +16,19 @@ import time
 import sys
 import os
 
+# ⚠ 한글 사용자명(서아름) 경로에서 Playwright 프로세스 spawn 실패 회피
+# → 브라우저 + 유저 데이터 디렉토리를 ASCII 경로로 강제
+os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", r"C:\playwright_browsers")
+USER_DATA_DIR = r"C:\playwright_userdata"
+os.makedirs(USER_DATA_DIR, exist_ok=True)
+
 # ──── 설정 ────────────────────────────────────────────────
 LOGIN_URL = "https://gschargev.lightning.force.com/lightning/page/home"
 SCRIPT_DIR = Path(__file__).parent
 DOWNLOAD_DIR = SCRIPT_DIR / "downloads"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
-# 세션 저장 — 다음 실행 시 자동 로그인 시도용 (선택)
+# 세션 저장 — persistent context 가 자동으로 USER_DATA_DIR 안에 보관함
 STORAGE_STATE = SCRIPT_DIR / "session_state.json"
 
 REPORTS = [
@@ -174,33 +180,24 @@ def main():
     print(f"📋 다운로드 대상: {len(REPORTS)}개 보고서뷰")
 
     with sync_playwright() as p:
-        # 한국어 Locale + 다운로드 허용 + 사용자 친화적 브라우저
-        browser = p.chromium.launch(
+        # ⚠ launch_persistent_context 사용 — user_data_dir를 ASCII 경로로 명시
+        # (한글 임시 폴더에서 spawn UNKNOWN 에러 회피)
+        print(f"  💾 브라우저 데이터 폴더: {USER_DATA_DIR}")
+        context = p.chromium.launch_persistent_context(
+            user_data_dir=USER_DATA_DIR,
             headless=False,
+            accept_downloads=True,
+            locale="ko-KR",
+            viewport={"width": 1600, "height": 900},
             args=["--start-maximized"],
         )
-        context_args = {
-            "accept_downloads": True,
-            "locale": "ko-KR",
-            "viewport": None,  # --start-maximized 와 조합
-        }
-        # 저장된 세션 있으면 로드 (다음번 자동 로그인용)
-        if STORAGE_STATE.exists():
-            context_args["storage_state"] = str(STORAGE_STATE)
-            print("  💾 저장된 세션 발견 — 자동 로그인 시도")
-
-        context = browser.new_context(**context_args)
-        page = context.new_page()
+        page = context.pages[0] if context.pages else context.new_page()
 
         # 1. 로그인 페이지 → 사용자 대기
         manual_login(page)
 
-        # 로그인 끝났으면 세션 저장 (다음번 자동 로그인용)
-        try:
-            context.storage_state(path=str(STORAGE_STATE))
-            print(f"  💾 세션 저장됨 → {STORAGE_STATE.name}")
-        except Exception:
-            pass
+        # persistent context 는 자동으로 user_data_dir 에 세션 저장됨
+        print(f"  💾 다음 실행 시 자동 로그인 됩니다 (세션 유지)")
 
         # 2. 각 보고서 다운로드
         results = []
@@ -226,7 +223,7 @@ def main():
         print(f"\n📊 {success_cnt}/{len(REPORTS)} 성공\n")
 
         input("✅ 종료하려면 Enter ... ")
-        browser.close()
+        context.close()
 
 
 if __name__ == "__main__":

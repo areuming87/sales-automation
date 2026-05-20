@@ -21,6 +21,8 @@ echo OK - Playwright library installed
 echo.
 
 echo [2/2] Downloading Chromium browser (~5 min)...
+REM Korean username path issue 회피 — ASCII 경로에 설치
+set PLAYWRIGHT_BROWSERS_PATH=C:\playwright_browsers
 python -m playwright install chromium
 if errorlevel 1 (
     echo.
