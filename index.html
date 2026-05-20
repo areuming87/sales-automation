@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>영업현황 자동화 시스템</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --primary-light: #eff6ff;
+      --success: #16a34a;
+      --success-light: #dcfce7;
+      --warning: #d97706;
+      --warning-light: #fef3c7;
+      --danger: #dc2626;
+      --danger-light: #fee2e2;
+      --purple: #7c3aed;
+      --purple-light: #ede9fe;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      --header-h: 64px;
+      --nav-h: 42px;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+      --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
+      --shadow-lg: 0 10px 15px rgba(0,0,0,.1), 0 4px 6px rgba(0,0,0,.05);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', -apple-system, sans-serif;
+      background: var(--gray-100);
+      color: var(--gray-800);
+      min-height: 100vh;
+    }
+
+    /* ─── HEADER ─── */
+    header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--header-h);
+      background: #fff;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--primary), #60a5fa);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .logo-text {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--gray-900);
+      line-height: 1.2;
+    }
+
+    .logo-sub {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--gray-400);
+    }
+
+    .header-center {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse-green 2s infinite;
+    }
+
+    .status-dot.offline { background: var(--danger); animation: none; }
+
+    @keyframes pulse-green {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,.4); }
+      50% { box-shadow: 0 0 0 5px rgba(22,163,74,0); }
+    }
+
+    .status-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-700);
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: var(--success-light);
+      color: var(--success);
+    }
+
+    .status-badge.offline {
+      background: var(--danger-light);
+      color: var(--danger);
+    }
+
+    .header-refresh {
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--gray-500);
+      transition: all .15s;
+      margin-left: 8px;
+    }
+
+    .header-refresh:hover { background: var(--gray-200); color: var(--gray-700); }
+    .header-refresh.spinning { animation: spin .6s linear; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .header-user {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .user-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), #60a5fa);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-700);
+    }
+
+    .btn-logout {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-500);
+      background: none;
+      border: 1px solid var(--gray-300);
+      padding: 5px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    /* 알림 종 */
+    .notif-wrap { position: relative; }
+    .notif-btn { width: 34px; height: 34px; border-radius: 8px; background: var(--gray-50); border: 1px solid var(--gray-200); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; transition: all .15s; }
+    .notif-btn:hover { background: var(--gray-100); }
+    .notif-btn.has-unread { background: var(--primary-light); border-color: var(--primary); }
+    .notif-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 5px; box-shadow: 0 0 0 2px #fff; }
+    .notif-dropdown { display: none; position: absolute; top: 42px; right: 0; width: 340px; background: #fff; border-radius: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.18); border: 1px solid var(--gray-200); overflow: hidden; z-index: 200; }
+    .notif-dropdown.open { display: block; }
+    .notif-head { padding: 12px 14px; border-bottom: 1px solid var(--gray-100); background: var(--gray-50); display: flex; align-items: center; justify-content: space-between; }
+    .notif-title { font-size: 13px; font-weight: 800; color: var(--gray-800); }
+    .notif-mark { background: none; border: none; font-size: 11px; color: var(--primary); cursor: pointer; font-weight: 600; }
+    .notif-list { max-height: 360px; overflow-y: auto; }
+    .notif-empty { padding: 32px 16px; text-align: center; color: var(--gray-400); font-size: 12px; }
+    .notif-item { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); display: flex; gap: 10px; cursor: pointer; }
+    .notif-item:hover { background: var(--gray-50); }
+    .notif-item.unread { background: #eff6ff; }
+    .ni-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+    .ni-body { flex: 1; min-width: 0; }
+    .ni-title { font-size: 12px; font-weight: 700; color: var(--gray-800); }
+    .ni-msg { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+    .ni-time { font-size: 10px; color: var(--gray-400); margin-top: 3px; }
+    .notif-foot { padding: 10px; border-top: 1px solid var(--gray-100); text-align: center; background: var(--gray-50); }
+    .notif-foot a { font-size: 12px; color: var(--primary); font-weight: 700; text-decoration: none; }
+
+    .btn-logout:hover {
+      background: var(--danger-light);
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+
+    /* ─── MAIN ─── */
+    /* ─── SUB NAV ─── */
+    .sub-nav {
+      position: fixed;
+      top: var(--header-h); left: 0; right: 0;
+      height: var(--nav-h);
+      background: #fff;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 4px;
+      z-index: 99;
+    }
+    .nav-breadcrumb {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--gray-400); font-weight: 500;
+      margin-right: 20px;
+    }
+    .nav-breadcrumb .bc-sep { font-size: 13px; color: var(--gray-300); }
+    .nav-breadcrumb a {
+      color: var(--gray-400); text-decoration: none; transition: color .15s;
+    }
+    .nav-breadcrumb a:hover { color: var(--primary); }
+    .nav-breadcrumb .bc-current { color: var(--gray-700); font-weight: 700; }
+    .nav-divider { width: 1px; height: 18px; background: var(--gray-200); margin: 0 8px; }
+    .nav-tab {
+      display: flex; align-items: center; gap: 6px;
+      height: var(--nav-h);
+      padding: 0 14px;
+      font-size: 13px; font-weight: 600;
+      color: var(--gray-500);
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .nav-tab:hover { color: var(--primary); background: var(--primary-light); }
+    .nav-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      font-weight: 700;
+    }
+    .nav-tab .tab-icon { font-size: 14px; }
+
+    main {
+      margin-top: var(--header-h);
+      padding: 32px 24px 40px;
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--gray-400);
+      margin-bottom: 16px;
+    }
+
+    /* ─── CARDS GRID ─── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    @media (max-width: 900px) { .cards-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 600px) { .cards-grid { grid-template-columns: 1fr 1fr; } }
+
+    .rep-card {
+      background: #fff;
+      border-radius: var(--radius);
+      border: 2px solid var(--gray-200);
+      padding: 24px 16px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      transition: box-shadow .2s, border-color .2s, transform .15s;
+      cursor: default;
+      position: relative;
+      box-shadow: var(--shadow);
+    }
+
+    .rep-card:hover {
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-2px);
+    }
+
+    .rep-card.mine {
+      border-color: var(--primary);
+      background: linear-gradient(160deg, var(--primary-light) 0%, #fff 60%);
+    }
+
+    .mine-crown {
+      position: absolute;
+      top: -10px; left: 50%; transform: translateX(-50%);
+      background: var(--primary);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    .rep-avatar {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      font-weight: 800;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .rep-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--gray-800);
+    }
+
+    .rep-role {
+      font-size: 11px;
+      color: var(--gray-400);
+      margin-top: -8px;
+    }
+
+    /* STATUS BADGE */
+    .status-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    .status-pill.waiting     { background: var(--gray-100);    color: var(--gray-500); }
+    .status-pill.need-login  { background: var(--warning-light); color: var(--warning); }
+    .status-pill.rpa-running { background: var(--purple-light);  color: var(--purple);
+      animation: badge-pulse 1.4s ease-in-out infinite; }
+    .status-pill.done        { background: var(--success-light); color: var(--success); }
+
+    @keyframes badge-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .6; }
+    }
+
+    .rep-stats {
+      width: 100%;
+      display: flex;
+      justify-content: space-around;
+      font-size: 11px;
+      color: var(--gray-500);
+      border-top: 1px solid var(--gray-100);
+      padding-top: 10px;
+    }
+
+    .rep-stat strong { display: block; font-size: 15px; color: var(--gray-700); font-weight: 700; }
+
+    .btn-start {
+      width: 100%;
+      padding: 9px 0;
+      background: var(--primary);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+
+    .btn-start:hover { background: var(--primary-dark); }
+    .btn-start:active { transform: scale(.97); }
+    .btn-start:disabled {
+      background: var(--gray-200);
+      color: var(--gray-400);
+      cursor: not-allowed;
+    }
+
+    /* ─── SUMMARY CARDS ─── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 700px) { .summary-grid { grid-template-columns: 1fr 1fr; } }
+
+    .summary-card {
+      background: #fff;
+      border-radius: var(--radius);
+      padding: 20px 20px 18px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--gray-200);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .summary-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+
+    .summary-value {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .summary-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-500);
+    }
+
+    .summary-sub {
+      font-size: 11px;
+      color: var(--gray-400);
+    }
+
+    /* ─── OFFLINE OVERLAY ─── */
+    .offline-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(17,24,39,.55);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .offline-overlay.active { display: flex; }
+
+    .offline-box {
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px 48px;
+      text-align: center;
+      max-width: 440px;
+      box-shadow: 0 25px 50px rgba(0,0,0,.25);
+    }
+
+    .offline-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .offline-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--gray-900);
+      margin-bottom: 8px;
+    }
+
+    .offline-msg {
+      font-size: 14px;
+      color: var(--gray-500);
+      line-height: 1.6;
+    }
+
+    .btn-retry {
+      margin-top: 24px;
+      padding: 10px 28px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s;
+    }
+
+    .btn-retry:hover { background: var(--primary-dark); }
+
+    /* ─── SESSION MODAL ─── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.4);
+      z-index: 300;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-backdrop.active { display: flex; }
+
+    .modal {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px;
+      width: 420px;
+      max-width: 95vw;
+      box-shadow: 0 20px 40px rgba(0,0,0,.2);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .modal-title { font-size: 17px; font-weight: 800; color: var(--gray-900); }
+
+    .modal-body { font-size: 14px; color: var(--gray-600); line-height: 1.7; }
+
+    .modal-progress {
+      margin-top: 20px;
+      background: var(--gray-100);
+      border-radius: 8px;
+      overflow: hidden;
+      height: 6px;
+    }
+
+    .modal-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), #60a5fa);
+      border-radius: 8px;
+      width: 0%;
+      transition: width .4s ease;
+    }
+
+    .modal-steps {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .modal-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--gray-400);
+    }
+
+    .modal-step.done   { color: var(--success); }
+    .modal-step.active { color: var(--primary); font-weight: 600; }
+
+    .step-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+
+    .modal-footer {
+      margin-top: 24px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn-secondary {
+      padding: 8px 20px;
+      background: var(--gray-100);
+      color: var(--gray-600);
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      padding: 8px 20px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* ─── TOAST ─── */
+    .toast-wrap {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      display: flex; flex-direction: column; gap: 10px;
+      z-index: 400;
+    }
+
+    .toast {
+      background: var(--gray-900);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 12px 18px;
+      border-radius: 10px;
+      box-shadow: 0 8px 16px rgba(0,0,0,.2);
+      animation: slide-in .25s ease;
+      max-width: 320px;
+    }
+
+    @keyframes slide-in {
+      from { transform: translateX(100%); opacity: 0; }
+      to   { transform: translateX(0);   opacity: 1; }
+    }
+
+    .toast.fadeout { animation: fade-out .3s ease forwards; }
+    @keyframes fade-out { to { opacity: 0; transform: translateY(8px); } }
+
+    /* ─── LAST SYNC ─── */
+    .sync-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .sync-time { font-size: 12px; color: var(--gray-400); }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header>
+  <!-- 로고 -->
+  <div class="header-logo">
+    <div class="logo-icon">⚡</div>
+    <div>
+      <div class="logo-text">영업현황 자동화</div>
+      <div class="logo-sub">Sales RPA Management System</div>
+    </div>
+  </div>
+
+  <!-- 시스템 상태 -->
+  <div class="header-center">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-label">팀 PC 상태</span>
+    <span class="status-badge" id="statusBadge">정상 연결</span>
+    <button class="header-refresh" id="btnRefresh" title="새로고침 (Google Sheets 동기화)">↻</button>
+  </div>
+
+  <!-- 로그인 사용자 -->
+  <div class="header-user">
+    <!-- 알림 종 -->
+    <div class="notif-wrap">
+      <button class="notif-btn" id="notifBtn" onclick="toggleNotifDropdown(event)">
+        🔔 <span class="notif-badge" id="notifBadge" style="display:none;">0</span>
+      </button>
+      <div class="notif-dropdown" id="notifDropdown">
+        <div class="notif-head"><span class="notif-title">🔔 알림</span><button class="notif-mark" onclick="markAllRead()">모두 읽음</button></div>
+        <div class="notif-list" id="notifList"></div>
+        <div class="notif-foot"><a href="queue.html">전체 작업 큐 보기 →</a></div>
+      </div>
+    </div>
+    <div class="user-avatar" id="avatarInitial">김</div>
+    <span class="user-name" id="headerUserName">김담당</span>
+    <button class="btn-logout" onclick="handleLogout()">로그아웃</button>
+  </div>
+</header>
+
+<!-- ══════════════ SUB NAV ══════════════ -->
+<nav class="sub-nav">
+  <a class="nav-tab active" href="index.html"><span class="tab-icon">🏠</span> 대시보드</a>
+  <a class="nav-tab" href="bpms.html"><span class="tab-icon">🔍</span> BPMS 데이터 조회 · 매핑</a>
+  <a class="nav-tab" href="files.html"><span class="tab-icon">📁</span> 파일 · PDF 관리</a>
+  <a class="nav-tab" href="queue.html"><span class="tab-icon">📋</span> 작업 큐</a>
+  <a class="nav-tab" href="nuriji.html"><span class="tab-icon">🌐</span> 누리집 등록</a>
+</nav>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<main style="margin-top: calc(var(--header-h) + var(--nav-h) + 24px);">
+
+  <!-- 담당자 카드 -->
+  <div class="sync-row">
+    <div class="section-title">영업 담당자 세션</div>
+    <div class="sync-time" id="lastSync">마지막 동기화: 방금 전</div>
+  </div>
+
+  <div class="cards-grid" id="cardsGrid">
+    <!-- JS로 렌더링 -->
+  </div>
+
+  <!-- 오늘 작업 요약 -->
+  <div class="section-title">오늘 작업 요약</div>
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="summary-icon" style="background:#eff6ff;">📥</div>
+      <div class="summary-value" style="color:var(--primary);" id="sumBpms">0</div>
+      <div class="summary-label">BPMS 가져온 건수</div>
+      <div class="summary-sub">오늘 수집 완료</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-icon" style="background:#fef3c7;">🕐</div>
+      <div class="summary-value" style="color:var(--warning);" id="sumPending">0</div>
+      <div class="summary-label">누리집 등록 대기</div>
+      <div class="summary-sub">처리 예정</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-icon" style="background:#dcfce7;">✅</div>
+      <div class="summary-value" style="color:var(--success);" id="sumDone">0</div>
+      <div class="summary-label">등록 완료</div>
+      <div class="summary-sub">처리 완료</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-icon" style="background:#fee2e2;">⚠️</div>
+      <div class="summary-value" style="color:var(--danger);" id="sumError">0</div>
+      <div class="summary-label">오류 발생</div>
+      <div class="summary-sub">확인 필요</div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ══════════════ OFFLINE OVERLAY ══════════════ -->
+<div class="offline-overlay" id="offlineOverlay">
+  <div class="offline-box">
+    <div class="offline-icon">🖥️</div>
+    <div class="offline-title">팀 PC 연결 끊김</div>
+    <div class="offline-msg">
+      팀 PC(서버)가 오프라인 상태입니다.<br>
+      PC 전원 및 프로그램 구동 여부를 확인하세요.
+    </div>
+    <button class="btn-retry" onclick="retryConnection()">재연결 시도</button>
+  </div>
+</div>
+
+<!-- ══════════════ SESSION MODAL ══════════════ -->
+<div class="modal-backdrop" id="sessionModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span style="font-size:24px;">🚀</span>
+      <div class="modal-title" id="modalTitle">세션 시작 중...</div>
+    </div>
+    <div class="modal-body" id="modalBody">
+      팀 PC에 브라우저 세션을 열고 있습니다.<br>잠시만 기다려 주세요.
+    </div>
+    <div class="modal-progress"><div class="modal-bar" id="modalBar"></div></div>
+    <div class="modal-steps" id="modalSteps"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">닫기</button>
+      <button class="btn-primary" id="modalAction" style="display:none;" onclick="goToViewer()">원격 뷰어 열기 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ TOAST ══════════════ -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+  /* ─── 데이터 ─── */
+  const CURRENT_USER = '김담당';
+
+  const REPS = [
+    { id: 'A', name: '김담당', role: '영업 1팀', color: '#2563eb', status: 'waiting',     bpms: 12, pending: 3, done: 9,  error: 0 },
+    { id: 'B', name: '이민준', role: '영업 1팀', color: '#16a34a', status: 'rpa-running', bpms: 8,  pending: 0, done: 7,  error: 1 },
+    { id: 'C', name: '박서연', role: '영업 2팀', color: '#d97706', status: 'done',        bpms: 15, pending: 0, done: 15, error: 0 },
+    { id: 'D', name: '최준혁', role: '영업 2팀', color: '#7c3aed', status: 'need-login',  bpms: 5,  pending: 5, done: 0,  error: 0 },
+    { id: 'E', name: '정하은', role: '영업 3팀', color: '#0891b2', status: 'waiting',     bpms: 0,  pending: 0, done: 0,  error: 0 },
+  ];
+
+  const STATUS_MAP = {
+    'waiting':     { label: '대기 중',      cls: 'waiting' },
+    'need-login':  { label: '로그인 필요',  cls: 'need-login' },
+    'rpa-running': { label: 'RPA 작동 중', cls: 'rpa-running' },
+    'done':        { label: '완료',         cls: 'done' },
+  };
+
+  let isOnline = true;
+  let activeRepId = null;
+
+  /* ─── 초기화 ─── */
+  window.addEventListener('DOMContentLoaded', () => {
+    renderCards();
+    updateSummary();
+    updateLastSync();
+    document.getElementById('btnRefresh').addEventListener('click', handleRefresh);
+    renderBell();
+  });
+
+  /* ── 알림 종 (공유 logic) ── */
+  const CURRENT_USER_NAME = '김담당';
+  const NOTIF_KEY = 'queue_notifs';
+  function getNotifs() { try { return JSON.parse(localStorage.getItem(NOTIF_KEY))||[]; } catch { return []; } }
+  function setNotifs(a){ localStorage.setItem(NOTIF_KEY, JSON.stringify(a)); }
+  function fmtTimeAgo(ts){ const d=Math.floor((Date.now()-ts)/1000); if(d<60)return'방금 전'; if(d<3600)return Math.floor(d/60)+'분 전'; if(d<86400)return Math.floor(d/3600)+'시간 전'; return Math.floor(d/86400)+'일 전'; }
+  function renderBell(){
+    const list = getNotifs();
+    const unread = list.filter(n => !n.read).length;
+    const btn = document.getElementById('notifBtn'), badge = document.getElementById('notifBadge');
+    btn.classList.toggle('has-unread', unread > 0);
+    badge.style.display = unread > 0 ? 'flex' : 'none';
+    badge.textContent = unread > 9 ? '9+' : unread;
+    const visible = list.filter(n => n.manager === CURRENT_USER_NAME).slice(0, 8);
+    const listEl = document.getElementById('notifList');
+    if (!visible.length) { listEl.innerHTML = '<div class="notif-empty">📭 알림이 없습니다</div>'; return; }
+    listEl.innerHTML = visible.map(n => {
+      const icon = n.type==='success'?'✅':n.type==='error'?'❌':n.type==='warning'?'⚠️':'⚙';
+      return `<div class="notif-item ${n.read?'':'unread'}" onclick="onNotifClick('${n.id}')"><div class="ni-icon">${icon}</div><div class="ni-body"><div class="ni-title">${n.title}</div><div class="ni-msg">${n.msg||''}</div><div class="ni-time">👤 ${n.manager} · ${fmtTimeAgo(n.timestamp)}</div></div></div>`;
+    }).join('');
+  }
+  function toggleNotifDropdown(e){ e?.stopPropagation(); document.getElementById('notifDropdown').classList.toggle('open'); }
+  document.addEventListener('click', e => { const dd=document.getElementById('notifDropdown'); if(dd?.classList.contains('open') && !e.target.closest('.notif-wrap')) dd.classList.remove('open'); });
+  function onNotifClick(id){ const list=getNotifs(); const n=list.find(x=>x.id===id); if(n){n.read=true; setNotifs(list); renderBell();} }
+  function markAllRead(){ const list=getNotifs(); list.forEach(n=>n.read=true); setNotifs(list); showToast('✓ 모든 알림을 읽음 처리했습니다.'); renderBell(); }
+  setInterval(renderBell, 1000);
+  window.addEventListener('storage', e => { if (e.key === NOTIF_KEY) renderBell(); });
+
+  /* ─── 카드 렌더링 ─── */
+  function renderCards() {
+    const grid = document.getElementById('cardsGrid');
+    grid.innerHTML = '';
+
+    REPS.forEach(rep => {
+      const isMe = rep.name === CURRENT_USER;
+      const s = STATUS_MAP[rep.status];
+      const initials = rep.name[0];
+
+      const card = document.createElement('div');
+      card.className = 'rep-card' + (isMe ? ' mine' : '');
+      card.innerHTML = `
+        ${isMe ? '<div class="mine-crown">내 계정</div>' : ''}
+        <div class="rep-avatar" style="background:${rep.color};">${initials}</div>
+        <div class="rep-name">${rep.name}</div>
+        <div class="rep-role">${rep.role}</div>
+        <span class="status-pill ${s.cls}">${s.label}</span>
+        <div class="rep-stats">
+          <div class="rep-stat"><strong>${rep.bpms}</strong>수집</div>
+          <div class="rep-stat"><strong>${rep.done}</strong>완료</div>
+          <div class="rep-stat"><strong style="color:var(--danger)">${rep.error}</strong>오류</div>
+        </div>
+        <button class="btn-start" onclick="startSession('${rep.id}')"
+          ${rep.status === 'done' ? 'disabled title="이미 완료된 세션입니다"' : ''}>
+          ${rep.status === 'rpa-running' ? '⚙ 세션 확인' : '▶ 작업 시작 (세션 열기)'}
+        </button>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  /* ─── 요약 집계 ─── */
+  function updateSummary() {
+    const totals = REPS.reduce((acc, r) => ({
+      bpms: acc.bpms + r.bpms,
+      pending: acc.pending + r.pending,
+      done: acc.done + r.done,
+      error: acc.error + r.error,
+    }), { bpms: 0, pending: 0, done: 0, error: 0 });
+
+    animateCount('sumBpms',    totals.bpms);
+    animateCount('sumPending', totals.pending);
+    animateCount('sumDone',    totals.done);
+    animateCount('sumError',   totals.error);
+  }
+
+  function animateCount(id, target) {
+    const el = document.getElementById(id);
+    let cur = 0;
+    const step = Math.ceil(target / 20);
+    const timer = setInterval(() => {
+      cur = Math.min(cur + step, target);
+      el.textContent = cur;
+      if (cur >= target) clearInterval(timer);
+    }, 40);
+  }
+
+  /* ─── 세션 시작 ─── */
+  function startSession(repId) {
+    if (!isOnline) { showToast('⚠ 팀 PC가 오프라인입니다.'); return; }
+
+    activeRepId = repId;
+    const rep = REPS.find(r => r.id === repId);
+
+    document.getElementById('modalTitle').textContent = `${rep.name} 세션 시작 중...`;
+    document.getElementById('modalBody').textContent =
+      `팀 PC에 ${rep.name} 담당자 전용 브라우저 세션을 열고 있습니다. 잠시만 기다려 주세요.`;
+
+    const steps = [
+      '팀 PC 연결 확인',
+      '브라우저 프로세스 초기화',
+      '담당자 프로필 로드',
+      '세션 준비 완료',
+    ];
+
+    const stepsEl = document.getElementById('modalSteps');
+    stepsEl.innerHTML = steps.map((s, i) =>
+      `<div class="modal-step" id="step${i}"><span class="step-icon">○</span>${s}</div>`
+    ).join('');
+
+    document.getElementById('modalBar').style.width = '0%';
+    document.getElementById('modalAction').style.display = 'none';
+    document.getElementById('sessionModal').classList.add('active');
+
+    let i = 0;
+    function next() {
+      if (i < steps.length) {
+        if (i > 0) {
+          const prev = document.getElementById(`step${i-1}`);
+          prev.className = 'modal-step done';
+          prev.querySelector('.step-icon').textContent = '✓';
+        }
+        const cur = document.getElementById(`step${i}`);
+        cur.className = 'modal-step active';
+        cur.querySelector('.step-icon').textContent = '▷';
+        document.getElementById('modalBar').style.width = `${((i+1)/steps.length*100).toFixed(0)}%`;
+        i++;
+        setTimeout(next, 700 + Math.random() * 400);
+      } else {
+        const last = document.getElementById(`step${steps.length-1}`);
+        last.className = 'modal-step done';
+        last.querySelector('.step-icon').textContent = '✓';
+        document.getElementById('modalBar').style.width = '100%';
+        document.getElementById('modalTitle').textContent = '세션 준비 완료!';
+        document.getElementById('modalBody').textContent =
+          '원격 뷰어에서 담당자 로그인을 진행하세요.';
+        document.getElementById('modalAction').style.display = 'inline-block';
+
+        // 상태 업데이트
+        rep.status = (rep.status === 'waiting' || rep.status === 'need-login') ? 'rpa-running' : rep.status;
+        renderCards();
+      }
+    }
+    setTimeout(next, 300);
+  }
+
+  function closeModal() {
+    document.getElementById('sessionModal').classList.remove('active');
+    activeRepId = null;
+  }
+
+  function goToViewer() {
+    closeModal();
+    showToast('🖥 원격 뷰어로 이동합니다... (화면 4 로드)');
+    // 실제 구현 시: window.location.href = '/viewer?rep=' + activeRepId;
+  }
+
+  /* ─── 새로고침 ─── */
+  function handleRefresh() {
+    if (!isOnline) { showToast('⚠ 오프라인 상태에서는 동기화할 수 없습니다.'); return; }
+
+    const btn = document.getElementById('btnRefresh');
+    btn.classList.add('spinning');
+    showToast('🔄 Google Sheets 동기화 중...');
+
+    setTimeout(() => {
+      btn.classList.remove('spinning');
+      updateLastSync();
+      // 시뮬레이션: 데이터 소폭 변경
+      REPS.forEach(r => { if (r.status === 'rpa-running') r.done = Math.min(r.done + 1, r.bpms); });
+      renderCards();
+      updateSummary();
+      showToast('✅ 동기화 완료되었습니다.');
+    }, 1200);
+  }
+
+  function updateLastSync() {
+    const now = new Date();
+    document.getElementById('lastSync').textContent =
+      `마지막 동기화: ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+  }
+
+  /* ─── 로그아웃 ─── */
+  function handleLogout() {
+    if (confirm('로그아웃 하시겠습니까?')) {
+      showToast('👋 로그아웃 되었습니다. 로그인 화면으로 이동합니다...');
+      setTimeout(() => {
+        // 실제 구현 시: window.location.href = '/login';
+        document.body.innerHTML = `
+          <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--gray-100);font-family:'Malgun Gothic',sans-serif;">
+            <div style="font-size:48px;margin-bottom:16px;">🔐</div>
+            <div style="font-size:20px;font-weight:800;color:var(--gray-800);margin-bottom:8px;">세션이 종료되었습니다</div>
+            <div style="font-size:14px;color:var(--gray-500);margin-bottom:24px;">로그인 화면으로 이동합니다.</div>
+            <a href="index.html" style="padding:10px 28px;background:var(--primary);color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">다시 로그인</a>
+          </div>`;
+      }, 1500);
+    }
+  }
+
+  /* ─── 오프라인 재연결 ─── */
+  function retryConnection() {
+    showToast('🔄 재연결 시도 중...');
+    setTimeout(() => {
+      // 시뮬레이션: 재연결 성공
+      setOnlineStatus(true);
+      showToast('✅ 팀 PC에 다시 연결되었습니다.');
+    }, 2000);
+  }
+
+  function setOnlineStatus(online) {
+    isOnline = online;
+    const dot   = document.getElementById('statusDot');
+    const badge = document.getElementById('statusBadge');
+    const overlay = document.getElementById('offlineOverlay');
+
+    dot.className   = 'status-dot' + (online ? '' : ' offline');
+    badge.className = 'status-badge' + (online ? '' : ' offline');
+    badge.textContent = online ? '정상 연결' : '오프라인';
+    overlay.classList.toggle('active', !online);
+  }
+
+  /* ─── 토스트 ─── */
+  function showToast(msg, duration = 3000) {
+    const wrap = document.getElementById('toastWrap');
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    wrap.appendChild(el);
+    setTimeout(() => {
+      el.classList.add('fadeout');
+      setTimeout(() => el.remove(), 350);
+    }, duration);
+  }
+
+  /* ─── 오프라인 시뮬레이션 토글 (개발 확인용: Shift+O) ─── */
+  document.addEventListener('keydown', e => {
+    if (e.shiftKey && e.key === 'O') setOnlineStatus(!isOnline);
+  });
+</script>
+</body>
+</html>

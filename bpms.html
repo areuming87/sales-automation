@@ -1,0 +1,2805 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BPMS 데이터 조회 · 영업현황 자동화</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --primary:       #2563eb;
+      --primary-dark:  #1d4ed8;
+      --primary-light: #eff6ff;
+      --yellow:        #fbbf24;
+      --yellow-bg:     #fef9c3;
+      --yellow-border: #f59e0b;
+      --yellow-text:   #78350f;
+      --blue-bg:       #dbeafe;
+      --blue-border:   #3b82f6;
+      --blue-text:     #1e3a8a;
+      --green:         #16a34a;
+      --green-dark:    #15803d;
+      --green-bg:      #dcfce7;
+      --success:       #16a34a;
+      --danger:        #dc2626;
+      --danger-light:  #fee2e2;
+      --gray-50:  #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      --header-h: 60px;
+      --nav-h: 42px;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+      --shadow-md: 0 4px 6px rgba(0,0,0,.07);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Malgun Gothic','Apple SD Gothic Neo',-apple-system,sans-serif;
+      background: var(--gray-100);
+      color: var(--gray-800);
+      font-size: 13px;
+    }
+
+    /* ── HEADER ── */
+    header {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: var(--header-h);
+      background: #fff;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex; align-items: center; padding: 0 20px; gap: 12px;
+      z-index: 100; box-shadow: var(--shadow);
+    }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg,var(--primary),#60a5fa);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 16px; flex-shrink: 0;
+    }
+    .logo-text { font-size: 15px; font-weight: 800; color: var(--gray-900); }
+    .page-divider { color: var(--gray-300); font-size: 18px; }
+    .page-title { font-size: 14px; font-weight: 700; color: var(--primary); }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .header-back {
+      font-size: 12px; font-weight: 600; padding: 5px 12px;
+      background: var(--gray-100); color: var(--gray-600);
+      border: 1px solid var(--gray-200); border-radius: 6px; cursor: pointer;
+      text-decoration: none; transition: all .15s;
+    }
+    .header-back:hover { background: var(--gray-200); color: var(--gray-800); }
+    .user-chip {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600; color: var(--gray-600);
+    }
+    .user-dot {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: linear-gradient(135deg,var(--primary),#60a5fa);
+      color: #fff; font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* 알림 종 */
+    .notif-wrap { position: relative; }
+    .notif-btn {
+      width: 34px; height: 34px; border-radius: 8px;
+      background: var(--gray-50); border: 1px solid var(--gray-200);
+      font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; transition: all .15s;
+    }
+    .notif-btn:hover { background: var(--gray-100); }
+    .notif-btn.has-unread { background: var(--primary-light); border-color: var(--primary); }
+    .notif-badge {
+      position: absolute; top: -4px; right: -4px;
+      min-width: 18px; height: 18px; border-radius: 9px;
+      background: var(--danger); color: #fff; font-size: 10px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center; padding: 0 5px;
+      box-shadow: 0 0 0 2px #fff;
+    }
+    .notif-dropdown {
+      display: none; position: absolute; top: 42px; right: 0; width: 340px;
+      background: #fff; border-radius: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.18);
+      border: 1px solid var(--gray-200); overflow: hidden; z-index: 200;
+    }
+    .notif-dropdown.open { display: block; }
+    .notif-head { padding: 12px 14px; border-bottom: 1px solid var(--gray-100); background: var(--gray-50); display: flex; align-items: center; justify-content: space-between; }
+    .notif-title { font-size: 13px; font-weight: 800; color: var(--gray-800); }
+    .notif-mark { background: none; border: none; font-size: 11px; color: var(--primary); cursor: pointer; font-weight: 600; }
+    .notif-mark:hover { text-decoration: underline; }
+    .notif-list { max-height: 360px; overflow-y: auto; }
+    .notif-empty { padding: 32px 16px; text-align: center; color: var(--gray-400); font-size: 12px; }
+    .notif-item { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); display: flex; gap: 10px; cursor: pointer; }
+    .notif-item:hover { background: var(--gray-50); }
+    .notif-item.unread { background: #eff6ff; }
+    .ni-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+    .ni-body { flex: 1; min-width: 0; }
+    .ni-title { font-size: 12px; font-weight: 700; color: var(--gray-800); }
+    .ni-msg { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+    .ni-time { font-size: 10px; color: var(--gray-400); margin-top: 3px; }
+    .notif-foot { padding: 10px; border-top: 1px solid var(--gray-100); text-align: center; background: var(--gray-50); }
+    .notif-foot a { font-size: 12px; color: var(--primary); font-weight: 700; text-decoration: none; }
+
+    /* ── 엑셀 매칭 모달 ── */
+    .xls-modal-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.5); z-index: 400;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .xls-modal-backdrop.active { display: flex; }
+    .xls-modal {
+      background: #fff; border-radius: 14px;
+      width: 720px; max-width: 95vw; max-height: 88vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 20px 40px rgba(0,0,0,.25);
+    }
+    .xls-head {
+      padding: 16px 20px; border-bottom: 1px solid var(--gray-200);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .xls-title { font-size: 16px; font-weight: 800; color: var(--gray-900); display: flex; align-items: center; gap: 8px; }
+    .xls-close { background: none; border: none; font-size: 22px; color: var(--gray-400); cursor: pointer; }
+
+    .xls-file-info {
+      background: var(--gray-50); padding: 12px 20px;
+      border-bottom: 1px solid var(--gray-100);
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+      font-size: 12px;
+    }
+    .xls-file-info strong { color: var(--gray-900); }
+    .xls-col-pick { display: flex; align-items: center; gap: 6px; }
+    .xls-col-pick select {
+      height: 28px; padding: 0 24px 0 8px;
+      border: 1px solid var(--yellow-border); border-radius: 5px;
+      background: var(--yellow-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%23d97706' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 6px center;
+      -webkit-appearance: none; appearance: none;
+      font-family: inherit; font-size: 11px; font-weight: 700;
+      color: var(--yellow-text); cursor: pointer; outline: none;
+      max-width: 320px; text-overflow: ellipsis;
+    }
+
+    .xls-summary {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      padding: 14px 20px; border-bottom: 1px solid var(--gray-100);
+    }
+    .xls-stat {
+      background: #fff; border: 1px solid var(--gray-200);
+      border-radius: 8px; padding: 12px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .xls-stat.match { border-color: #bbf7d0; background: #f0fdf4; }
+    .xls-stat.new   { border-color: #93c5fd; background: #eff6ff; }
+    .xls-stat.err   { border-color: #fca5a5; background: #fef2f2; }
+    .xls-stat-icon { font-size: 22px; }
+    .xls-stat-num  { font-size: 22px; font-weight: 800; line-height: 1; }
+    .xls-stat-lbl  { font-size: 11px; color: var(--gray-500); font-weight: 600; margin-top: 2px; }
+
+    .xls-tabs {
+      display: flex; gap: 0; padding: 0 16px;
+      border-bottom: 1px solid var(--gray-200); background: #fff;
+    }
+    .xls-tab {
+      padding: 10px 14px; background: none; border: none; cursor: pointer;
+      font-family: inherit; font-size: 12px; font-weight: 700; color: var(--gray-500);
+      border-bottom: 2px solid transparent;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .xls-tab:hover { color: var(--primary); }
+    .xls-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .xls-tab .tab-num {
+      background: var(--gray-100); color: var(--gray-600);
+      padding: 1px 7px; border-radius: 20px; font-size: 10px; font-weight: 800;
+    }
+    .xls-tab.active .tab-num { background: var(--primary); color: #fff; }
+
+    .xls-body { flex: 1; overflow-y: auto; padding: 12px 20px; min-height: 200px; }
+
+    .xls-row {
+      padding: 10px 12px; border: 1px solid var(--gray-200); border-radius: 7px;
+      margin-bottom: 6px; font-size: 12px;
+    }
+    .xls-row.match { border-left: 3px solid var(--green); }
+    .xls-row.new   { border-left: 3px solid var(--blue-border); }
+    .xls-row.err   { border-left: 3px solid var(--danger); background: #fef2f2; }
+    .xls-row.skipped { border-left: 3px solid var(--gray-400); background: var(--gray-50); }
+    .xls-row-tag.gray { background: var(--gray-100); color: var(--gray-600); }
+    .xls-row-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .xls-row-pjt {
+      font-family: monospace; font-size: 11px; font-weight: 700;
+      color: var(--primary); background: var(--primary-light);
+      padding: 2px 7px; border-radius: 4px;
+    }
+    .xls-row-name { font-weight: 700; color: var(--gray-800); flex: 1; min-width: 0; }
+    .xls-row-tag { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 700; }
+    .xls-row-tag.green { background: var(--green-bg); color: var(--green); }
+    .xls-row-tag.blue  { background: var(--blue-bg);  color: var(--blue-text); }
+    .xls-row-tag.red   { background: var(--danger-light); color: var(--danger); }
+    .xls-changes {
+      margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--gray-200);
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .xls-change-row {
+      display: flex; gap: 6px; font-size: 11px; align-items: center;
+    }
+    .xls-change-field { color: var(--gray-500); min-width: 100px; font-weight: 600; }
+    .xls-change-old { color: var(--gray-400); text-decoration: line-through; }
+    .xls-change-arr { color: var(--gray-400); }
+    .xls-change-new { color: var(--green); font-weight: 700; }
+    .xls-err-reason { font-size: 11px; color: var(--danger); margin-top: 3px; font-weight: 600; }
+
+    .xls-options {
+      padding: 12px 20px; border-top: 1px solid var(--gray-100);
+      background: var(--gray-50);
+      display: flex; gap: 14px; flex-wrap: wrap;
+    }
+    .xls-opt {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--gray-700); cursor: pointer;
+      font-weight: 600;
+    }
+    .xls-opt input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); }
+
+    .xls-foot {
+      padding: 14px 20px; border-top: 1px solid var(--gray-200);
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    }
+    .xls-foot-info { font-size: 11px; color: var(--gray-500); }
+    .xls-foot-actions { display: flex; gap: 8px; }
+    .btn-xls-cancel {
+      padding: 9px 18px; background: var(--gray-100); color: var(--gray-700);
+      border: none; border-radius: 7px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+    }
+    .btn-xls-apply {
+      padding: 9px 22px; background: var(--green); color: #fff;
+      border: none; border-radius: 7px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 1px 3px rgba(22,163,74,.3);
+    }
+    .btn-xls-apply:hover { background: var(--green-dark); }
+    .btn-xls-apply:disabled { background: var(--gray-200); color: var(--gray-400); cursor: not-allowed; box-shadow: none; }
+
+    .xls-empty { padding: 30px 20px; text-align: center; color: var(--gray-400); font-size: 13px; }
+
+    /* ── SUB NAV ── */
+    .sub-nav {
+      position: fixed;
+      top: var(--header-h); left: 0; right: 0;
+      height: var(--nav-h);
+      background: #fff;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex; align-items: center;
+      padding: 0 20px; gap: 4px;
+      z-index: 99;
+    }
+    .nav-breadcrumb {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--gray-400); font-weight: 500;
+      margin-right: 20px;
+    }
+    .nav-breadcrumb .bc-sep { font-size: 13px; color: var(--gray-300); }
+    .nav-breadcrumb a { color: var(--gray-400); text-decoration: none; transition: color .15s; }
+    .nav-breadcrumb a:hover { color: var(--primary); }
+    .nav-breadcrumb .bc-current { color: var(--gray-700); font-weight: 700; }
+    .nav-divider { width: 1px; height: 18px; background: var(--gray-200); margin: 0 8px; }
+    .nav-tab {
+      display: flex; align-items: center; gap: 6px;
+      height: var(--nav-h); padding: 0 14px;
+      font-size: 13px; font-weight: 600;
+      color: var(--gray-500); text-decoration: none;
+      border-bottom: 2px solid transparent;
+      transition: all .15s; white-space: nowrap;
+    }
+    .nav-tab:hover { color: var(--primary); background: var(--primary-light); }
+    .nav-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+    .nav-tab .tab-icon { font-size: 14px; }
+
+    /* ── MAIN ── */
+    main {
+      margin-top: calc(var(--header-h) + var(--nav-h));
+      padding: 20px;
+      max-width: 1600px;
+      margin-left: auto; margin-right: auto;
+    }
+
+    /* ── FILTER CARD ── */
+    .filter-card {
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--gray-200);
+      padding: 0;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .filter-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px 10px;
+      border-bottom: 1px solid var(--gray-100);
+      background: var(--gray-50);
+    }
+    .filter-card-title {
+      font-size: 13px; font-weight: 700; color: var(--gray-700);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn-reset {
+      font-size: 11px; font-weight: 600; color: var(--gray-400);
+      background: none; border: none; cursor: pointer; padding: 2px 6px;
+      border-radius: 4px; transition: all .15s;
+    }
+    .btn-reset:hover { color: var(--danger); background: var(--danger-light); }
+
+    .filter-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── FILTER ROW ── */
+    .filter-row {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    }
+    .filter-group {
+      display: flex; align-items: center; gap: 0;
+      border-radius: 7px; overflow: hidden;
+    }
+    .filter-label {
+      font-size: 12px; font-weight: 700; padding: 0 10px;
+      height: 34px; display: flex; align-items: center;
+      white-space: nowrap; flex-shrink: 0;
+    }
+
+    /* YELLOW — dropdown trigger */
+    .filter-yellow .filter-label {
+      background: var(--yellow-bg); color: var(--yellow-text);
+      border: 1px solid var(--yellow-border); border-right: none;
+      border-radius: 7px 0 0 7px;
+    }
+    .filter-yellow select {
+      height: 34px; padding: 0 28px 0 10px;
+      border: 1px solid var(--yellow-border);
+      border-radius: 0 7px 7px 0;
+      background: #fffbeb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%23d97706' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 8px center;
+      -webkit-appearance: none; appearance: none;
+      font-family: inherit; font-size: 12px; font-weight: 600;
+      color: var(--yellow-text); cursor: pointer;
+      min-width: 110px; outline: none;
+    }
+    .filter-yellow select:focus { border-color: var(--yellow); box-shadow: 0 0 0 2px rgba(251,191,36,.25); }
+
+    /* BLUE — text / date input */
+    .filter-blue .filter-label {
+      background: var(--blue-bg); color: var(--blue-text);
+      border: 1px solid var(--blue-border); border-right: none;
+      border-radius: 7px 0 0 7px;
+    }
+    .filter-blue input {
+      height: 34px; padding: 0 10px;
+      border: 1px solid var(--blue-border);
+      border-radius: 0 7px 7px 0;
+      background: #eff6ff;
+      font-family: inherit; font-size: 12px;
+      color: var(--blue-text); outline: none;
+      min-width: 120px;
+    }
+    .filter-blue input[type="date"] { min-width: 140px; }
+    .filter-blue input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,.2); }
+    .filter-blue input::placeholder { color: #93c5fd; }
+
+    /* date range connector */
+    .date-tilde {
+      font-size: 14px; color: var(--gray-400); font-weight: 700;
+      padding: 0 4px; flex-shrink: 0;
+    }
+
+    /* section label (계약등록일) */
+    .section-label {
+      font-size: 12px; font-weight: 800; color: var(--gray-600);
+      padding: 0 4px; white-space: nowrap;
+    }
+
+    /* ── ACTION BUTTONS ── */
+    .action-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 18px 14px;
+      border-top: 1px solid var(--gray-100);
+      background: var(--gray-50);
+      flex-wrap: wrap;
+    }
+    .btn-green {
+      height: 36px; padding: 0 20px;
+      background: var(--green);
+      color: #fff; font-family: inherit; font-size: 13px; font-weight: 700;
+      border: none; border-radius: 7px; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      transition: background .15s, transform .1s;
+      box-shadow: 0 1px 3px rgba(22,163,74,.3);
+    }
+    .btn-green:hover { background: var(--green-dark); }
+    .btn-green:active { transform: scale(.97); }
+    .btn-search { background: var(--primary); box-shadow: 0 1px 3px rgba(37,99,235,.3); }
+    .btn-search:hover { background: var(--primary-dark); }
+
+    /* 핑크 계열 버튼 */
+    .btn-pink {
+      height: 36px; padding: 0 20px;
+      color: #fff; font-family: inherit; font-size: 13px; font-weight: 700;
+      border: none; border-radius: 7px; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      transition: background .15s, transform .1s;
+    }
+    .btn-pink:active { transform: scale(.97); }
+    .btn-bpms   { background: #db2777; box-shadow: 0 1px 3px rgba(219,39,119,.3); }
+    .btn-bpms:hover   { background: #be185d; }
+    .btn-bpms-dl { background: #ec4899; box-shadow: 0 1px 3px rgba(236,72,153,.3); }
+    .btn-bpms-dl:hover { background: #db2777; }
+    .btn-nuriji { background: #9333ea; box-shadow: 0 1px 3px rgba(147,51,234,.3); }
+    .btn-nuriji:hover { background: #7e22ce; }
+
+    /* 누리집 등록가능 상태 배지 */
+    .reg-status {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 700;
+      padding: 3px 9px; border-radius: 20px;
+      white-space: nowrap;
+    }
+    .reg-status.ready   { background: #dcfce7; color: #15803d; }
+    .reg-status.review  { background: #fef3c7; color: #92400e; }
+    .reg-status.pending { background: var(--gray-100); color: var(--gray-500); }
+    .reg-status.done    { background: #dbeafe; color: #1e40af; }
+
+    /* 버튼 그룹 구분선 */
+    .action-sep { width: 1px; height: 22px; background: var(--gray-200); margin: 0 4px; flex-shrink: 0; }
+
+    /* BPMS 로딩 모달 */
+    .bpms-modal-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 400;
+      align-items: center; justify-content: center;
+    }
+    .bpms-modal-backdrop.active { display: flex; }
+    .bpms-modal {
+      background: #fff; border-radius: 16px; padding: 32px;
+      width: 420px; max-width: 95vw;
+      box-shadow: 0 20px 40px rgba(0,0,0,.2);
+    }
+    .bpms-modal-header {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+    }
+    .bpms-modal-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: linear-gradient(135deg,#db2777,#f472b6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+    .bpms-modal-title { font-size: 17px; font-weight: 800; color: var(--gray-900); }
+    .bpms-modal-sub   { font-size: 12px; color: var(--gray-400); margin-top: 2px; }
+    .bpms-progress-wrap {
+      background: var(--gray-100); border-radius: 8px; height: 8px;
+      overflow: hidden; margin: 16px 0 8px;
+    }
+    .bpms-progress-bar {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg,#db2777,#f472b6);
+      border-radius: 8px; transition: width .4s ease;
+    }
+    .bpms-steps { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .bpms-step  { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--gray-400); }
+    .bpms-step.done   { color: var(--success); }
+    .bpms-step.active { color: #db2777; font-weight: 600; }
+    .bpms-step-icon   { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+    .bpms-result {
+      margin-top: 16px; padding: 12px 14px;
+      background: #fdf2f8; border: 1px solid #fbcfe8;
+      border-radius: 8px; font-size: 13px; color: #9d174d;
+      display: none;
+    }
+    .bpms-result strong { font-size: 22px; color: #db2777; }
+    .bpms-modal-footer { margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px; }
+    .btn-modal-close {
+      padding: 8px 20px; background: var(--gray-100); color: var(--gray-600);
+      border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .btn-modal-ok {
+      padding: 8px 20px; background: #db2777; color: #fff;
+      border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
+      display: none;
+    }
+    .btn-modal-ok:hover { background: #be185d; }
+
+    .result-meta {
+      margin-left: auto;
+      font-size: 12px; color: var(--gray-400); font-weight: 600;
+    }
+    .result-meta span { color: var(--primary); font-weight: 800; }
+
+    /* ── TABLE CARD ── */
+    .table-card {
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--gray-200);
+      /* overflow:hidden 제거 — 부모에 overflow:hidden이 있으면
+         자식 th의 position:sticky가 table-wrap 기준이 아닌
+         table-card 기준으로 묶여 헤더 고정이 풀림 */
+    }
+    .table-wrap {
+      overflow-x: auto;
+      overflow-y: auto;
+      /* 테이블 영역이 페이지의 유일한 스크롤 컨테이너가 되도록 더 작게 설정 */
+      max-height: calc(100vh - 460px);
+      min-height: 320px;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 12px; white-space: nowrap;
+    }
+    thead tr {
+      background: #f1f5f9;
+    }
+    th {
+      padding: 10px 12px;
+      font-size: 11px; font-weight: 700;
+      color: var(--gray-600);
+      text-align: left; white-space: nowrap;
+      border-right: 1px solid var(--gray-200);
+      user-select: none; cursor: pointer;
+      /* 핵심: th 자체에 sticky 적용 — 강력하게 */
+      position: -webkit-sticky;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #f1f5f9 !important;
+      /* 스크롤 시 하단 경계선이 사라지지 않도록 box-shadow로 구현 */
+      box-shadow: inset 0 -2px 0 var(--gray-300), 0 2px 4px rgba(0,0,0,.04);
+    }
+    th:last-child { border-right: none; }
+    th:hover { background: #e2e8f0; }
+    th .sort-icon { font-size: 9px; color: var(--gray-400); margin-left: 3px; }
+    /* 체크박스 컬럼 – 내용은 없어도 배경 덮음 */
+    th:first-child { cursor: default; }
+
+    /* 드래그 가능 헤더 표시 */
+    th[draggable="true"] {
+      cursor: grab;
+      user-select: none;
+    }
+    th[draggable="true"]:active { cursor: grabbing; }
+    th[draggable="true"].dragging { opacity: 0.4; background: var(--primary-light); }
+    th[draggable="true"].drag-over {
+      background: var(--primary-light);
+      box-shadow: inset 3px 0 0 var(--primary);
+    }
+    th[draggable="true"].drag-over-right {
+      background: var(--primary-light);
+      box-shadow: inset -3px 0 0 var(--primary);
+    }
+
+    /* 컬럼 리사이즈 핸들 */
+    .col-resize-handle {
+      position: absolute;
+      right: -3px; top: 0; bottom: 0;
+      width: 6px;
+      cursor: col-resize;
+      user-select: none;
+      z-index: 10;
+    }
+    .col-resize-handle:hover { background: var(--primary); }
+    .col-resize-handle.resizing { background: var(--primary); }
+    body.col-resizing { cursor: col-resize !important; user-select: none; }
+    body.col-resizing th, body.col-resizing td { pointer-events: none; }
+    body.col-resizing .col-resize-handle { pointer-events: auto; }
+
+    /* 컬럼 설정 안내 + 리셋 버튼 */
+    .col-settings-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px;
+      background: var(--gray-50);
+      border-bottom: 1px solid var(--gray-200);
+      font-size: 11px; color: var(--gray-500);
+    }
+    .col-settings-tip { flex: 1; }
+    .col-settings-tip strong { color: var(--primary); font-weight: 700; }
+    .btn-col-reset {
+      padding: 4px 10px;
+      font-size: 11px; font-weight: 600;
+      background: #fff; color: var(--gray-600);
+      border: 1px solid var(--gray-300); border-radius: 5px; cursor: pointer;
+      transition: all .12s;
+    }
+    .btn-col-reset:hover { background: var(--gray-100); color: var(--gray-800); }
+
+    tbody tr { border-bottom: 1px solid var(--gray-100); transition: background .1s; }
+    tbody tr:hover { background: var(--primary-light); }
+    tbody tr:last-child { border-bottom: none; }
+
+    td {
+      padding: 9px 12px;
+      color: var(--gray-700);
+      border-right: 1px solid var(--gray-100);
+      vertical-align: middle;
+    }
+    td:last-child { border-right: none; }
+
+    .td-pjt { font-family: monospace; font-size: 11px; color: var(--primary); font-weight: 700; }
+    .td-name { font-weight: 600; color: var(--gray-900); }
+    .td-address { max-width: 180px; overflow: hidden; text-overflow: ellipsis; color: var(--gray-500); }
+
+    .badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+    }
+    .badge-blue   { background: var(--blue-bg);   color: var(--blue-text); }
+    .badge-green  { background: var(--green-bg);  color: var(--green); }
+    .badge-yellow { background: var(--yellow-bg); color: var(--yellow-text); }
+    .badge-gray   { background: var(--gray-100);  color: var(--gray-500); }
+
+    /* ── BPMS 동기화 상태 배너 ── */
+    .sync-banner {
+      background: linear-gradient(135deg, #f0f9ff, #eff6ff);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius);
+      padding: 12px 16px; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 14px;
+      box-shadow: var(--shadow);
+    }
+    .sync-banner.running {
+      background: linear-gradient(135deg, #fef3c7, #fffbeb);
+      border-color: #fcd34d;
+    }
+    .sync-banner.fresh {
+      background: linear-gradient(135deg, var(--green-bg), #f0fdf4);
+      border-color: #86efac;
+    }
+    .sync-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      background: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+      box-shadow: 0 1px 2px rgba(0,0,0,.05);
+    }
+    .sync-banner.running .sync-icon {
+      animation: spin-slow 2.5s linear infinite;
+    }
+    @keyframes spin-slow { to { transform: rotate(360deg); } }
+    .sync-text { flex: 1; min-width: 0; }
+    .sync-title {
+      font-size: 13px; font-weight: 700; color: var(--gray-900);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sync-title .who {
+      font-family: monospace; background: rgba(255,255,255,.7);
+      padding: 1px 7px; border-radius: 4px;
+      font-size: 11px; color: var(--primary); font-weight: 700;
+    }
+    .sync-banner.running .sync-title .who { color: #92400e; }
+    .sync-banner.fresh   .sync-title .who { color: #15803d; }
+    .sync-desc {
+      font-size: 11px; color: var(--gray-500); margin-top: 3px;
+      line-height: 1.5;
+    }
+
+    .sync-progress-wrap {
+      height: 5px; background: rgba(255,255,255,.6); border-radius: 10px;
+      overflow: hidden; margin-top: 8px; display: none;
+    }
+    .sync-banner.running .sync-progress-wrap { display: block; }
+    .sync-progress-bar {
+      height: 100%; background: linear-gradient(90deg, #f59e0b, #fcd34d);
+      width: 0%; transition: width .3s ease; border-radius: 10px;
+    }
+
+    /* empty state */
+    .empty-state {
+      text-align: center; padding: 60px 20px;
+      color: var(--gray-400);
+    }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-title { font-size: 15px; font-weight: 700; color: var(--gray-500); margin-bottom: 6px; }
+    .empty-sub { font-size: 12px; }
+
+    /* loading spinner */
+    .spinner-wrap {
+      display: none; text-align: center; padding: 50px 20px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--gray-200);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* toast */
+    .toast-wrap { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 500; }
+    .toast {
+      background: var(--gray-900); color: #fff; font-size: 12px; font-weight: 500;
+      padding: 10px 16px; border-radius: 8px; box-shadow: 0 8px 16px rgba(0,0,0,.2);
+      animation: slide-in .2s ease; max-width: 300px;
+    }
+    @keyframes slide-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .toast.fadeout { animation: fade-out .3s ease forwards; }
+    @keyframes fade-out { to { opacity: 0; transform: translateY(6px); } }
+
+    /* upload input hidden */
+    #fileInput { display: none; }
+
+    /* pagination */
+    .table-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; border-top: 1px solid var(--gray-100);
+      background: var(--gray-50);
+    }
+    .page-info { font-size: 12px; color: var(--gray-400); }
+    .page-info span { color: var(--gray-700); font-weight: 700; }
+    .page-btns { display: flex; gap: 4px; }
+    .page-btn {
+      width: 28px; height: 28px; border-radius: 5px;
+      border: 1px solid var(--gray-200); background: #fff;
+      font-size: 12px; font-weight: 600; color: var(--gray-600);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all .12s;
+    }
+    .page-btn:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .page-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  </style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<header>
+  <div class="logo-icon">⚡</div>
+  <div class="logo-text">영업현황 자동화</div>
+  <div class="header-right">
+    <!-- 알림 종 -->
+    <div class="notif-wrap">
+      <button class="notif-btn" id="notifBtn" onclick="toggleNotifDropdown(event)">
+        🔔 <span class="notif-badge" id="notifBadge" style="display:none;">0</span>
+      </button>
+      <div class="notif-dropdown" id="notifDropdown">
+        <div class="notif-head"><span class="notif-title">🔔 알림</span><button class="notif-mark" onclick="markAllRead()">모두 읽음</button></div>
+        <div class="notif-list" id="notifList"></div>
+        <div class="notif-foot"><a href="queue.html">전체 작업 큐 보기 →</a></div>
+      </div>
+    </div>
+    <div class="user-chip">
+      <div class="user-dot">김</div>
+      김담당
+    </div>
+  </div>
+</header>
+
+<!-- ══ SUB NAV ══ -->
+<nav class="sub-nav">
+  <a class="nav-tab" href="index.html"><span class="tab-icon">🏠</span> 대시보드</a>
+  <a class="nav-tab active" href="bpms.html"><span class="tab-icon">🔍</span> BPMS 데이터 조회 · 매핑</a>
+  <a class="nav-tab" href="files.html"><span class="tab-icon">📁</span> 파일 · PDF 관리</a>
+  <a class="nav-tab" href="queue.html"><span class="tab-icon">📋</span> 작업 큐</a>
+  <a class="nav-tab" href="nuriji.html"><span class="tab-icon">🌐</span> 누리집 등록</a>
+</nav>
+
+<!-- ══ MAIN ══ -->
+<main>
+
+  <!-- BPMS 동기화 상태 배너 -->
+  <div class="sync-banner" id="syncBanner">
+    <div class="sync-icon" id="syncIcon">🔄</div>
+    <div class="sync-text">
+      <div class="sync-title" id="syncTitle">BPMS 보고서 동기화 상태</div>
+      <div class="sync-desc" id="syncDesc">5명의 담당자가 같은 BPMS 보고서 데이터를 공유합니다. 1명만 실행하면 모두 갱신됩니다.</div>
+      <div class="sync-progress-wrap"><div class="sync-progress-bar" id="syncProgressBar"></div></div>
+    </div>
+  </div>
+
+  <!-- 필터 카드 -->
+  <div class="filter-card">
+    <div class="filter-card-header">
+      <div class="filter-card-title">🔍 검색 필터 <span style="font-size:10px;color:var(--gray-400);font-weight:500;margin-left:8px;">📌 대기번호가 있으면 자동으로 "🌐 등록 완료"로 처리됩니다</span></div>
+      <button class="btn-reset" onclick="resetFilters()">↺ 초기화</button>
+    </div>
+
+    <div class="filter-body">
+      <!-- 행 1 -->
+      <div class="filter-row">
+        <div class="filter-group filter-yellow">
+          <div class="filter-label">사업연도</div>
+          <select id="f_year" onchange="onFilterChange()">
+            <option value="">전체</option>
+          </select>
+        </div>
+
+        <div class="filter-group filter-yellow">
+          <div class="filter-label">담당자</div>
+          <select id="f_manager" onchange="onFilterChange()">
+            <option value="">전체</option>
+          </select>
+        </div>
+
+        <div class="filter-group filter-yellow">
+          <div class="filter-label">시공사</div>
+          <select id="f_partner" onchange="onFilterChange()">
+            <option value="">전체</option>
+          </select>
+        </div>
+
+        <div class="filter-group filter-blue">
+          <div class="filter-label">PJT</div>
+          <input type="text" id="f_pjt" placeholder="PJT 코드 입력" oninput="onFilterChange()" />
+        </div>
+
+        <div class="filter-group filter-blue">
+          <div class="filter-label">대기번호</div>
+          <input type="text" id="f_wait_no" placeholder="대기번호 입력" oninput="onFilterChange()" />
+        </div>
+      </div>
+
+      <!-- 행 2 -->
+      <div class="filter-row">
+        <div class="filter-group filter-yellow">
+          <div class="filter-label">사업구분1</div>
+          <select id="f_biz1" onchange="onBiz1Change()">
+            <option value="">전체</option>
+          </select>
+        </div>
+
+        <div class="filter-group filter-yellow">
+          <div class="filter-label">사업구분1-상세</div>
+          <select id="f_biz1d" onchange="onFilterChange()">
+            <option value="">전체</option>
+          </select>
+        </div>
+
+        <div class="filter-group filter-yellow">
+          <div class="filter-label">사업구분2</div>
+          <select id="f_biz2" onchange="onFilterChange()">
+            <option value="">전체</option>
+          </select>
+        </div>
+
+        <div class="filter-group filter-yellow">
+          <div class="filter-label">대기번호 입력여부</div>
+          <select id="f_wait_yn" onchange="onFilterChange()">
+            <option value="">전체</option>
+            <option value="Y">입력됨</option>
+            <option value="N">미입력</option>
+          </select>
+        </div>
+
+        <div class="filter-group filter-yellow">
+          <div class="filter-label">누리집 등록가능</div>
+          <select id="f_reg_status" onchange="onFilterChange()">
+            <option value="">전체</option>
+            <option value="ready">✅ 등록 준비 완료</option>
+            <option value="review">⚠ 검수 필요</option>
+            <option value="pending">⬜ 미처리</option>
+            <option value="done">🌐 등록 완료</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 행 3 : 계약등록일 -->
+      <div class="filter-row">
+        <span class="section-label">📅 계약등록일</span>
+
+        <div class="filter-group filter-blue">
+          <div class="filter-label">시작일</div>
+          <input type="date" id="f_date_from" onchange="onFilterChange()" />
+        </div>
+
+        <span class="date-tilde">~</span>
+
+        <div class="filter-group filter-blue">
+          <div class="filter-label">종료일</div>
+          <input type="date" id="f_date_to" onchange="onFilterChange()" />
+        </div>
+      </div>
+    </div>
+
+    <!-- 액션 버튼 -->
+    <div class="action-row">
+      <button class="btn-green btn-search" onclick="handleSearch()">
+        🔍 검색
+      </button>
+      <button class="btn-green" onclick="handleUpload()">
+        📤 엑셀 업로드
+      </button>
+      <button class="btn-green" onclick="handleDownload()">
+        📥 엑셀 다운로드
+      </button>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="onFileSelected(event)" />
+
+      <!-- 구분선 -->
+      <div class="action-sep"></div>
+
+      <button class="btn-pink btn-bpms" onclick="handleBpmsLoad()">
+        📡 BPMS 불러오기
+      </button>
+      <button class="btn-pink btn-bpms-dl" onclick="handleBpmsFileDownload()">
+        📥 BPMS 첨부파일 다운로드
+      </button>
+      <button class="btn-pink btn-nuriji" onclick="handleNurijiRegister()">
+        🌐 누리집 등록
+      </button>
+
+      <div class="result-meta" id="resultMeta">전체 <strong id="totalCount" style="color:var(--gray-800);">0</strong>건 / 조회 <span id="resultCount">0</span>건</div>
+    </div>
+  </div>
+
+  <!-- 테이블 카드 -->
+  <div class="table-card">
+    <div class="col-settings-bar">
+      <div class="col-settings-tip">
+        💡 <strong>헤더를 드래그</strong>해서 순서 변경 · <strong>헤더 우측 끝을 드래그</strong>해서 너비 조절 · 설정은 <strong>담당자별로 저장</strong>됩니다.
+      </div>
+      <button class="btn-col-reset" onclick="manualDedupe()" style="margin-right:6px;">🧹 중복 PJT 정리</button>
+      <button class="btn-col-reset" onclick="resetTableConfig()">↺ 컬럼 설정 초기화</button>
+    </div>
+    <div class="table-wrap">
+      <!-- 헤더는 항상 표시 / tbody 안에서 빈상태·로딩·데이터 전환 -->
+      <table id="dataTable">
+        <thead>
+          <tr id="tableHeaderRow"></tr>
+        </thead>
+        <tbody id="tableBody">
+          <!-- 초기: 빈 상태 메시지 -->
+          <tr id="emptyRow">
+            <td colspan="18" style="padding:0; border:none;">
+              <div class="empty-state" id="initialEmptyState">
+                <div class="empty-icon">📭</div>
+                <div class="empty-title">데이터가 없습니다</div>
+                <div class="empty-sub">상단의 <strong>[📡 BPMS 불러오기]</strong> 또는 <strong>[📤 엑셀 업로드]</strong> 버튼으로 데이터를 추가하세요.</div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-footer" id="tableFooter" style="display:none;">
+      <div class="page-info">
+        <span id="pageFrom">1</span>–<span id="pageTo">20</span> / 전체 <span id="pageTotal">0</span>건
+      </div>
+      <div class="page-btns" id="pageBtns"></div>
+    </div>
+  </div>
+
+</main>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ══ 엑셀 매칭 모달 ══ -->
+<div class="xls-modal-backdrop" id="xlsModal">
+  <div class="xls-modal">
+    <div class="xls-head">
+      <div class="xls-title">📤 엑셀 매칭 결과 <span id="xlsFileName" style="font-size:12px;color:var(--gray-400);font-weight:500;"></span></div>
+      <button class="xls-close" onclick="closeXlsModal()">×</button>
+    </div>
+
+    <div class="xls-file-info">
+      <span>📊 총 <strong id="xlsTotalRows">0</strong>행</span>
+      <div class="xls-col-pick">
+        <span>파일 종류:</span>
+        <select id="xlsFileType" onchange="onFileTypeChange()" style="background:#dbeafe;border-color:var(--primary);color:var(--blue-text);">
+          <option value="sales">📋 영업정보 (마스터 — PJT 추가 가능)</option>
+          <option value="charger">🔌 충전기정보 (보조 — 기존 PJT만 업데이트)</option>
+        </select>
+      </div>
+      <div class="xls-col-pick">
+        <span>헤더 행:</span>
+        <select id="xlsHeaderRow" onchange="reAnalyze()"></select>
+      </div>
+      <div class="xls-col-pick">
+        <span>PJT코드 컬럼:</span>
+        <select id="xlsPjtCol" onchange="reAnalyze()"></select>
+      </div>
+    </div>
+
+    <!-- 파일 종류별 안내 -->
+    <div id="xlsFileTypeInfo" style="padding:10px 20px;font-size:11px;border-bottom:1px solid var(--gray-200);"></div>
+
+    <!-- 자동 매핑된 컬럼 안내 -->
+    <div id="xlsColMapInfo" style="padding:10px 20px;background:#fef9c3;border-bottom:1px solid #fde68a;font-size:11px;color:#78350f;display:none;">
+      <strong>🔗 자동 매핑된 컬럼:</strong> <span id="xlsColMapList"></span>
+    </div>
+
+    <!-- 매핑되지 않은 컬럼 (수동 매핑 가능) -->
+    <div id="xlsUnmappedInfo" style="padding:10px 20px;background:#fef2f2;border-bottom:1px solid #fecaca;font-size:11px;color:#991b1b;display:none;">
+      <strong>⚠ 매핑되지 않은 엑셀 컬럼 (DB 필드를 직접 지정하세요):</strong>
+      <div id="xlsUnmappedList" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="xls-summary">
+      <div class="xls-stat match">
+        <div class="xls-stat-icon">✅</div>
+        <div>
+          <div class="xls-stat-num" style="color:var(--green);" id="xlsCntMatch">0</div>
+          <div class="xls-stat-lbl">매칭 (업데이트)</div>
+        </div>
+      </div>
+      <div class="xls-stat new">
+        <div class="xls-stat-icon">➕</div>
+        <div>
+          <div class="xls-stat-num" style="color:var(--blue-text);" id="xlsCntNew">0</div>
+          <div class="xls-stat-lbl">신규 (DB에 없음)</div>
+        </div>
+      </div>
+      <div class="xls-stat err">
+        <div class="xls-stat-icon">❌</div>
+        <div>
+          <div class="xls-stat-num" style="color:var(--danger);" id="xlsCntErr">0</div>
+          <div class="xls-stat-lbl">오류 (확인 필요)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="xls-tabs">
+      <button class="xls-tab active" data-tab="match"   onclick="switchXlsTab('match')">✅ 매칭 <span class="tab-num" id="xlsTabMatchN">0</span></button>
+      <button class="xls-tab"        data-tab="new"     onclick="switchXlsTab('new')">➕ 신규 <span class="tab-num" id="xlsTabNewN">0</span></button>
+      <button class="xls-tab"        data-tab="skipped" onclick="switchXlsTab('skipped')" id="xlsTabSkippedBtn" style="display:none;">⊘ 건너뜀 <span class="tab-num" id="xlsTabSkippedN">0</span></button>
+      <button class="xls-tab"        data-tab="err"     onclick="switchXlsTab('err')">❌ 오류 <span class="tab-num" id="xlsTabErrN">0</span></button>
+    </div>
+
+    <div class="xls-body" id="xlsBody"></div>
+
+    <div class="xls-options">
+      <label class="xls-opt"><input type="checkbox" id="xlsOptNew" checked /> 신규 행도 DB에 추가</label>
+      <label class="xls-opt"><input type="checkbox" id="xlsOptSkipErr" checked /> 오류 행은 건너뛰기</label>
+    </div>
+
+    <div class="xls-foot">
+      <div class="xls-foot-info" id="xlsFootInfo">적용 시 영향: 0건</div>
+      <div class="xls-foot-actions">
+        <button class="btn-xls-cancel" onclick="closeXlsModal()">닫기</button>
+        <button class="btn-xls-apply" id="btnXlsApply" onclick="applyXlsMatching()">✅ 매칭 적용하기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BPMS 불러오기 모달 ══ -->
+<div class="bpms-modal-backdrop" id="bpmsModal">
+  <div class="bpms-modal">
+    <div class="bpms-modal-header">
+      <div class="bpms-modal-icon">📡</div>
+      <div>
+        <div class="bpms-modal-title" id="bpmsModalTitle">BPMS 데이터 불러오는 중...</div>
+        <div class="bpms-modal-sub" id="bpmsModalSub">보고서뷰에서 최신 데이터를 가져옵니다</div>
+      </div>
+    </div>
+    <div class="bpms-progress-wrap">
+      <div class="bpms-progress-bar" id="bpmsProgressBar"></div>
+    </div>
+    <div class="bpms-steps" id="bpmsSteps"></div>
+    <div class="bpms-result" id="bpmsResult"></div>
+    <div class="bpms-modal-footer">
+      <button class="btn-modal-close" id="bpmsCloseBtn" onclick="closeBpmsModal()">닫기</button>
+      <button class="btn-modal-ok" id="bpmsOkBtn" onclick="closeBpmsModal()">확인</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── SAMPLE DATA ── */
+/* ─────────────────────────────────────────────
+   BPMS 데이터 — 엑셀 업로드/BPMS 불러오기로만 채워짐
+   localStorage에 저장 → 새로고침해도 유지
+───────────────────────────────────────────── */
+const BPMS_DATA_KEY = 'bpms_data';
+
+let SAMPLE = loadBpmsData();
+
+function loadBpmsData() {
+  try {
+    const data = JSON.parse(localStorage.getItem(BPMS_DATA_KEY)) || [];
+    return Array.isArray(data) ? data : [];
+  } catch { return []; }
+}
+
+/* PJT코드 정규화 — 공백 제거, 대문자 통일 */
+function normalizePjt(code) {
+  return String(code || '').trim().toUpperCase();
+}
+
+/* 중복 PJT 자동 제거 — 첫 번째 등장한 행을 유지, 나중 것은 같은 PJT면 병합·업데이트 */
+function dedupeSample(options = {}) {
+  const merge = options.merge !== false;  // 기본: 병합 (뒤에 나온 데이터로 빈 값 채우기)
+  const seen = new Map();
+  const removed = [];
+
+  const cleaned = [];
+  SAMPLE.forEach((item, idx) => {
+    const code = normalizePjt(item.pjt);
+    if (!code) {
+      removed.push({ reason: 'PJT 비어있음', idx });
+      return;
+    }
+    item.pjt = code;  // 정규화된 코드로 저장
+
+    if (seen.has(code)) {
+      const existing = seen.get(code);
+      if (merge) {
+        // 빈 값만 채우는 방식으로 병합 (기존 값 우선)
+        Object.keys(item).forEach(k => {
+          if ((existing[k] === undefined || existing[k] === '' || existing[k] === null) && item[k]) {
+            existing[k] = item[k];
+          }
+        });
+      }
+      removed.push({ reason: '중복', code });
+      return;
+    }
+    seen.set(code, item);
+    cleaned.push(item);
+  });
+
+  if (removed.length > 0) {
+    SAMPLE.length = 0;
+    SAMPLE.push(...cleaned);
+    saveBpmsData();
+  }
+  return removed;
+}
+function saveBpmsData() {
+  try { localStorage.setItem(BPMS_DATA_KEY, JSON.stringify(SAMPLE)); }
+  catch (e) { console.error('데이터 저장 실패:', e); }
+}
+
+/* 자동 상태 동기화: 대기번호가 있으면 무조건 '등록 완료' */
+function syncRegStatus(item) {
+  if (item.wait_no && String(item.wait_no).trim()) {
+    item.reg_status = 'done';
+    item.wait_yn = 'Y';
+  } else {
+    item.wait_yn = 'N';
+    if (item.reg_status === 'done') item.reg_status = 'pending';
+  }
+  return item;
+}
+
+function syncAllRegStatus() { SAMPLE.forEach(syncRegStatus); }
+
+// 페이지 로드 시 자동: 중복 제거 + 상태 동기화
+const _dedupedAtLoad = dedupeSample({ merge: true });
+syncAllRegStatus();
+if (_dedupedAtLoad.length > 0) {
+  // 콘솔에만 로깅 — 토스트는 DOM 준비 후 발송
+  console.log(`[BPMS] 자동 중복 제거: ${_dedupedAtLoad.length}건`);
+  window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => showToast(`🧹 중복 PJT ${_dedupedAtLoad.length}건이 자동 병합되었습니다.`, 4000), 500);
+  });
+}
+
+/* 전체 데이터 삭제 */
+function clearAllData() {
+  if (SAMPLE.length === 0) { showToast('삭제할 데이터가 없습니다.'); return; }
+  if (!confirm(`정말 모든 데이터 ${SAMPLE.length}건을 삭제하시겠습니까?\n(되돌릴 수 없습니다)`)) return;
+  SAMPLE.length = 0;
+  saveBpmsData();
+  filteredData = [];
+  document.getElementById('resultCount').textContent = '0';
+  document.getElementById('totalCount').textContent = '0';
+  document.getElementById('tableBody').innerHTML = `
+    <tr id="emptyRow">
+      <td colspan="18" style="padding:0;border:none;">
+        <div class="empty-state">
+          <div class="empty-icon">📭</div>
+          <div class="empty-title">데이터가 없습니다</div>
+          <div class="empty-sub">상단의 <strong>[📡 BPMS 불러오기]</strong> 또는 <strong>[📤 엑셀 업로드]</strong> 버튼으로 데이터를 추가하세요.</div>
+        </div>
+      </td>
+    </tr>`;
+  document.getElementById('tableFooter').style.display = 'none';
+  showToast('🗑 모든 데이터가 삭제되었습니다.');
+}
+
+function updateTotalCount() {
+  const el = document.getElementById('totalCount');
+  if (el) el.textContent = SAMPLE.length;
+}
+
+const REG_STATUS_MAP = {
+  'ready':   { label: '✅ 등록 준비 완료', cls: 'ready' },
+  'review':  { label: '⚠ 검수 필요',      cls: 'review' },
+  'pending': { label: '⬜ 미처리',          cls: 'pending' },
+  'done':    { label: '🌐 등록 완료',      cls: 'done' },
+};
+
+/* 사업구분1 → 사업구분1-상세 매핑
+   투자: 자체 / 협력사 등 (필요시)
+   보조금: 서울시 / 환경부 */
+const BIZ1_DETAIL = {
+  '투자':   ['자체','협력사'],
+  '보조금': ['서울시','환경부'],
+};
+
+let filteredData = [];
+let sortKey = '';
+let sortAsc = true;
+let currentPage = 1;
+const PAGE_SIZE = 20;
+
+/* ─────────────────────────────────────────────
+   컬럼 메타데이터 — 너비/순서 사용자별 커스터마이즈 가능
+───────────────────────────────────────────── */
+const DEFAULT_COLUMNS = [
+  { key:'reg_status', label:'누리집 등록가능',    width:140 },
+  { key:'pjt',        label:'PJT코드',           width:130 },
+  { key:'name',       label:'영업현황이름',       width:200 },
+  { key:'partner',    label:'시공사',            width:120 },
+  { key:'biz1',       label:'사업구분1',          width:90  },
+  { key:'biz1d',      label:'사업구분1-상세',     width:120 },
+  { key:'biz2',       label:'사업구분2',          width:90  },
+  { key:'wait_no',    label:'대기번호',          width:100 },
+  { key:'ownership',  label:'충전기소유권',       width:110 },
+  { key:'capacity',   label:'충전기 용량',       width:100 },
+  { key:'qty_slow',   label:'충전기 대수(완속)', width:130 },
+  { key:'qty_fast',   label:'충전기 대수(급속)', width:130 },
+  { key:'model',      label:'충전기모델',        width:120 },
+  { key:'inst_type',  label:'설치유형',          width:90  },
+  { key:'reg_date',   label:'계약 등록일',        width:110 },
+  { key:'sales_date', label:'영업승인일',        width:100 },
+  { key:'env_date',   label:'환경부 승인일자',   width:120 },
+];
+
+const TABLE_CFG_KEY = () => `table_config_${CURRENT_USER}`;  // 사용자별 저장
+
+function loadTableConfig() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem(TABLE_CFG_KEY()));
+    if (cfg && Array.isArray(cfg.columns)) {
+      // 저장된 순서 + 너비 적용 (새 컬럼이 추가됐다면 뒤에 자동 추가)
+      const result = [];
+      cfg.columns.forEach(key => {
+        const d = DEFAULT_COLUMNS.find(c => c.key === key);
+        if (d) result.push({ ...d, width: cfg.widths?.[key] || d.width });
+      });
+      DEFAULT_COLUMNS.forEach(d => {
+        if (!result.some(r => r.key === d.key)) result.push({ ...d });
+      });
+      return result;
+    }
+  } catch {}
+  return DEFAULT_COLUMNS.map(c => ({ ...c }));
+}
+
+function saveTableConfig() {
+  const cfg = {
+    columns: TABLE_COLS.map(c => c.key),
+    widths:  Object.fromEntries(TABLE_COLS.map(c => [c.key, c.width])),
+  };
+  localStorage.setItem(TABLE_CFG_KEY(), JSON.stringify(cfg));
+}
+
+function resetTableConfig() {
+  if (!confirm('컬럼 순서·너비를 기본값으로 초기화하시겠습니까?')) return;
+  localStorage.removeItem(TABLE_CFG_KEY());
+  TABLE_COLS = DEFAULT_COLUMNS.map(c => ({ ...c }));
+  renderTableHeader();
+  renderTable();
+  showToast('↺ 컬럼 설정을 기본값으로 초기화했습니다.');
+}
+
+/* 수동 중복 정리 (현재 데이터 상태 점검) */
+function manualDedupe() {
+  // 먼저 분석만 (실제 제거 전에 미리보기)
+  const seen = new Map();
+  const duplicates = [];
+  SAMPLE.forEach((item, idx) => {
+    const code = normalizePjt(item.pjt);
+    if (!code) return;
+    if (seen.has(code)) duplicates.push(code);
+    else seen.set(code, idx);
+  });
+
+  if (duplicates.length === 0) {
+    showToast('✅ 중복된 PJT코드가 없습니다. 모두 깨끗합니다!', 3000);
+    return;
+  }
+
+  const sample = [...new Set(duplicates)].slice(0, 5).join(', ');
+  if (!confirm(`중복 PJT코드 ${duplicates.length}건이 발견되었습니다.\n\n예시: ${sample}${duplicates.length > 5 ? '...' : ''}\n\n중복 행을 제거하고 데이터를 병합하시겠습니까?\n(기존 값 우선, 빈 칸만 채움)`)) return;
+
+  const removed = dedupeSample({ merge: true });
+  showToast(`🧹 중복 ${removed.length}건 정리 완료. (현재 ${SAMPLE.length}건)`, 4000);
+  updateTotalCount();
+  populateFilterOptions();
+  if (filteredData.length) handleSearch();
+}
+
+let TABLE_COLS = loadTableConfig();
+
+/* ─────────────────────────────────────────────
+   필터 옵션 동적 생성 — 실제 백데이터에서 추출
+───────────────────────────────────────────── */
+function uniqueValues(field) {
+  return [...new Set(
+    SAMPLE.map(s => s[field])
+      .filter(v => v != null && String(v).trim() !== '')
+      .map(v => String(v).trim())
+  )].sort((a, b) => a.localeCompare(b, 'ko'));
+}
+
+function fillSelect(id, values, currentValue) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const prev = currentValue !== undefined ? currentValue : sel.value;
+  sel.innerHTML = '<option value="">전체</option>' +
+    values.map(v => `<option value="${v}" ${v === prev ? 'selected' : ''}>${v}</option>`).join('');
+}
+
+function populateFilterOptions() {
+  fillSelect('f_year',    uniqueValues('year'));
+  fillSelect('f_manager', uniqueValues('manager'));
+  fillSelect('f_partner', uniqueValues('partner'));
+  fillSelect('f_biz1',    uniqueValues('biz1'));
+  fillSelect('f_biz2',    uniqueValues('biz2'));
+  // 사업구분1-상세는 현재 선택된 사업구분1에 따라
+  onBiz1Change(true);
+}
+
+/* ── 사업구분1 연동 (실제 데이터 기반) ── */
+function onBiz1Change(skipFilterChange) {
+  const biz1 = document.getElementById('f_biz1').value;
+  const sel = document.getElementById('f_biz1d');
+  const prev = sel.value;
+
+  // 사업구분1이 선택되면 해당 biz1의 biz1d만, 선택 없으면 전체 biz1d
+  const filtered = biz1 ? SAMPLE.filter(s => s.biz1 === biz1) : SAMPLE;
+  const details = [...new Set(
+    filtered.map(s => s.biz1d).filter(v => v && String(v).trim())
+  )].sort((a, b) => a.localeCompare(b, 'ko'));
+
+  sel.innerHTML = '<option value="">전체</option>' +
+    details.map(d => `<option value="${d}" ${d === prev ? 'selected' : ''}>${d}</option>`).join('');
+
+  if (!skipFilterChange) onFilterChange();
+}
+
+function onFilterChange() {
+  // 실시간 카운트 업데이트 (검색 전)
+}
+
+/* ── 검색 ── */
+function handleSearch() {
+  const year    = document.getElementById('f_year').value;
+  const manager = document.getElementById('f_manager').value;
+  const partner = document.getElementById('f_partner').value;
+  const pjt     = document.getElementById('f_pjt').value.trim().toLowerCase();
+  const waitNo  = document.getElementById('f_wait_no').value.trim().toLowerCase();
+  const biz1    = document.getElementById('f_biz1').value;
+  const biz1d   = document.getElementById('f_biz1d').value;
+  const biz2    = document.getElementById('f_biz2').value;
+  const waitYn  = document.getElementById('f_wait_yn').value;
+  const regStatus = document.getElementById('f_reg_status').value;
+  const dateFrom = document.getElementById('f_date_from').value;
+  const dateTo   = document.getElementById('f_date_to').value;
+
+  showSpinner(true);
+
+  setTimeout(() => {
+    filteredData = SAMPLE.filter(r => {
+      if (year    && r.year    !== year)    return false;
+      if (manager && r.manager !== manager) return false;
+      if (partner && r.partner !== partner) return false;
+      if (pjt    && !r.pjt.toLowerCase().includes(pjt))   return false;
+      if (waitNo && !r.wait_no.toLowerCase().includes(waitNo)) return false;
+      if (biz1   && r.biz1  !== biz1)  return false;
+      if (biz1d  && r.biz1d !== biz1d) return false;
+      if (biz2   && r.biz2  !== biz2)  return false;
+      if (waitYn && r.wait_yn !== waitYn) return false;
+      if (regStatus && r.reg_status !== regStatus) return false;
+      if (dateFrom && r.reg_date && r.reg_date < dateFrom) return false;
+      if (dateTo   && r.reg_date && r.reg_date > dateTo)   return false;
+      return true;
+    });
+
+    currentPage = 1;
+    showSpinner(false);
+    renderTable();
+    document.getElementById('resultCount').textContent = filteredData.length;
+    updateTotalCount();
+    showToast(`🔍 ${filteredData.length}건 조회되었습니다. (전체 ${SAMPLE.length}건 중)`);
+  }, 600);
+}
+
+/* ─────────────────────────────────────────────
+   동적 테이블 헤더 렌더링 — 드래그 + 리사이즈 지원
+───────────────────────────────────────────── */
+function renderTableHeader() {
+  const tr = document.getElementById('tableHeaderRow');
+  // ⚠ position:relative 는 절대 인라인으로 지정하지 말 것!
+  // CSS의 position:sticky 를 덮어써서 헤더 고정이 풀림.
+  // sticky 자체가 positioning context를 만들기 때문에 resize-handle 의 absolute는 그대로 작동함.
+  let html = `<th style="width:36px;min-width:36px;"><input type="checkbox" id="chkAll" onchange="toggleAll(this)" /></th>`;
+  TABLE_COLS.forEach(col => {
+    html += `
+      <th draggable="true" data-key="${col.key}"
+          style="min-width:${col.width}px;width:${col.width}px;"
+          ondragstart="onColDragStart(event)"
+          ondragenter="onColDragEnter(event)"
+          ondragleave="onColDragLeave(event)"
+          ondragover="onColDragOver(event)"
+          ondrop="onColDrop(event)"
+          ondragend="onColDragEnd(event)"
+          onclick="onHeaderClick(event,'${col.key}')">
+        ${col.label} <span class="sort-icon">▲▼</span>
+        <span class="col-resize-handle" onmousedown="startColResize(event,'${col.key}')"></span>
+      </th>`;
+  });
+  tr.innerHTML = html;
+}
+
+/* 컬럼 키로 셀 값 추출 */
+function cellValueOf(r, key) {
+  if (key === 'reg_status') {
+    const st = REG_STATUS_MAP[r.reg_status] || REG_STATUS_MAP.pending;
+    return st.label;
+  }
+  if (key === 'qty_slow') return r.qty_slow ?? r.qty ?? '';
+  if (key === 'qty_fast') return r.qty_fast ?? '';
+  return r[key] || '';
+}
+
+/* ─── 드래그로 컬럼 순서 변경 ─── */
+let dragCol = null;
+let dragOverDir = null;  // 'left' or 'right'
+
+function onColDragStart(e) {
+  dragCol = e.currentTarget.dataset.key;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  // Firefox 호환
+  try { e.dataTransfer.setData('text/plain', dragCol); } catch {}
+}
+function onColDragEnter(e) {
+  if (!dragCol || e.currentTarget.dataset.key === dragCol) return;
+  e.preventDefault();
+}
+function onColDragOver(e) {
+  if (!dragCol) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const th = e.currentTarget;
+  const rect = th.getBoundingClientRect();
+  const isRightHalf = (e.clientX - rect.left) > rect.width / 2;
+  th.classList.remove('drag-over', 'drag-over-right');
+  th.classList.add(isRightHalf ? 'drag-over-right' : 'drag-over');
+  dragOverDir = isRightHalf ? 'right' : 'left';
+}
+function onColDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over', 'drag-over-right');
+}
+function onColDrop(e) {
+  e.preventDefault();
+  if (!dragCol) return;
+  const dropKey = e.currentTarget.dataset.key;
+  e.currentTarget.classList.remove('drag-over', 'drag-over-right');
+  if (dropKey === dragCol) return;
+  const fromIdx = TABLE_COLS.findIndex(c => c.key === dragCol);
+  let toIdx = TABLE_COLS.findIndex(c => c.key === dropKey);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = TABLE_COLS.splice(fromIdx, 1);
+  // 드롭 위치 보정 (오른쪽 절반에 드롭하면 한 칸 뒤로)
+  if (fromIdx < toIdx) toIdx -= 1;
+  if (dragOverDir === 'right') toIdx += 1;
+  TABLE_COLS.splice(toIdx, 0, moved);
+  saveTableConfig();
+  renderTableHeader();
+  renderTable();
+  showToast(`📐 컬럼 순서 변경됨 → 김담당님 설정으로 저장`, 2000);
+}
+function onColDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('th').forEach(th => th.classList.remove('drag-over', 'drag-over-right'));
+  dragCol = null;
+  dragOverDir = null;
+}
+
+/* 헤더 클릭 = 정렬 (단, 드래그 중이거나 리사이즈 중이면 무시) */
+let lastClickWasDrag = false;
+function onHeaderClick(e, key) {
+  if (lastClickWasDrag) { lastClickWasDrag = false; return; }
+  if (e.target.classList.contains('col-resize-handle')) return;
+  sortBy(key);
+}
+
+/* ─── 컬럼 너비 리사이즈 ─── */
+let resizing = null;
+function startColResize(e, key) {
+  e.preventDefault();
+  e.stopPropagation();
+  const col = TABLE_COLS.find(c => c.key === key);
+  if (!col) return;
+  resizing = { key, startX: e.clientX, startWidth: col.width };
+  e.target.classList.add('resizing');
+  document.body.classList.add('col-resizing');
+  document.addEventListener('mousemove', onColResize);
+  document.addEventListener('mouseup', stopColResize);
+}
+function onColResize(e) {
+  if (!resizing) return;
+  const delta = e.clientX - resizing.startX;
+  const newWidth = Math.max(60, Math.min(500, resizing.startWidth + delta));
+  const col = TABLE_COLS.find(c => c.key === resizing.key);
+  if (col) {
+    col.width = newWidth;
+    document.querySelectorAll(`th[data-key="${resizing.key}"]`).forEach(th => {
+      th.style.minWidth = newWidth + 'px';
+      th.style.width = newWidth + 'px';
+    });
+  }
+}
+function stopColResize(e) {
+  if (resizing) {
+    saveTableConfig();
+    showToast(`📏 컬럼 너비 변경 저장됨`, 1500);
+  }
+  document.querySelectorAll('.col-resize-handle').forEach(h => h.classList.remove('resizing'));
+  document.body.classList.remove('col-resizing');
+  resizing = null;
+  document.removeEventListener('mousemove', onColResize);
+  document.removeEventListener('mouseup', stopColResize);
+}
+
+/* ── 테이블 렌더링 ── */
+function renderTable() {
+  const tbody  = document.getElementById('tableBody');
+  const footer = document.getElementById('tableFooter');
+
+  if (!filteredData.length) {
+    const noData = SAMPLE.length === 0;
+    tbody.innerHTML = `
+      <tr id="emptyRow">
+        <td colspan="18" style="padding:0;border:none;">
+          <div class="empty-state">
+            <div class="empty-icon">${noData ? '📭' : '🔍'}</div>
+            <div class="empty-title">${noData ? '데이터가 없습니다' : '조회 결과가 없습니다'}</div>
+            <div class="empty-sub">${noData
+              ? '상단의 <strong>[📡 BPMS 불러오기]</strong> 또는 <strong>[📤 엑셀 업로드]</strong> 버튼으로 데이터를 추가하세요.'
+              : '검색 조건을 변경하고 다시 시도하세요.'}</div>
+          </div>
+        </td>
+      </tr>`;
+    footer.style.display = 'none';
+    return;
+  }
+
+  footer.style.display = 'flex';
+  // 페이지네이션 제거 — 전체 표시
+  const pageData = filteredData;
+
+  tbody.innerHTML = pageData.map(r => {
+    let cells = `<td><input type="checkbox" class="row-chk" data-status="${r.reg_status}" /></td>`;
+    TABLE_COLS.forEach(col => {
+      cells += `<td>${cellValueOf(r, col.key)}</td>`;
+    });
+    return `<tr data-pjt="${r.pjt}" data-status="${r.reg_status}">${cells}</tr>`;
+  }).join('');
+
+  // 총 건수만 표시 (페이지네이션 없음)
+  const total = filteredData.length;
+  document.getElementById('pageFrom').textContent = 1;
+  document.getElementById('pageTo').textContent = total;
+  document.getElementById('pageTotal').textContent = total;
+  document.getElementById('pageBtns').innerHTML = '';
+}
+
+/* ── 정렬 ── */
+function sortBy(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = true; }
+  filteredData.sort((a, b) => {
+    const va = a[key] ?? ''; const vb = b[key] ?? '';
+    return sortAsc ? String(va).localeCompare(String(vb), 'ko') : String(vb).localeCompare(String(va), 'ko');
+  });
+  currentPage = 1;
+  renderTable();
+}
+
+/* ── 전체 체크 ── */
+function toggleAll(el) {
+  document.querySelectorAll('.row-chk').forEach(c => c.checked = el.checked);
+}
+
+/* ── 초기화 ── */
+function resetFilters() {
+  ['f_year','f_manager','f_partner','f_biz1','f_biz1d','f_biz2','f_wait_yn','f_reg_status'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  ['f_pjt','f_wait_no','f_date_from','f_date_to'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('f_biz1d').innerHTML = '<option value="">전체</option>';
+  filteredData = [];
+  document.getElementById('resultCount').textContent = '0';
+  document.getElementById('tableBody').innerHTML = `
+    <tr id="emptyRow">
+      <td colspan="18" style="padding:0;border:none;">
+        <div class="empty-state">
+          <div class="empty-icon">📭</div>
+          <div class="empty-title">데이터가 없습니다</div>
+          <div class="empty-sub">상단의 <strong>[📡 BPMS 불러오기]</strong> 또는 <strong>[📤 엑셀 업로드]</strong> 버튼으로 데이터를 추가하세요.</div>
+        </div>
+      </td>
+    </tr>`;
+  document.getElementById('tableFooter').style.display = 'none';
+  showToast('↺ 필터가 초기화되었습니다.');
+}
+
+/* ─────────────────────────────────────────────
+   엑셀 업로드 — SheetJS로 파싱 + PJT코드 매칭
+───────────────────────────────────────────── */
+function handleUpload() {
+  document.getElementById('fileInput').click();
+}
+
+// 엑셀 ↔ DB 컬럼 매핑 테이블
+/* ─────────────────────────────────────────────
+   엑셀 컬럼 ↔ DB 필드 매핑표 (확장 가능)
+
+   📌 핵심 매핑 (사용자 정의):
+     • 시공사   ← "고객사", "고객사 이름", "고객사이름"
+     • 충전기모델 ← "제품 이름", "제품이름", "모델명", "제품명"
+───────────────────────────────────────────── */
+const XLS_COL_MAP = {
+  // ── PJT코드 (키) ─────────────────────────────
+  'pjt코드':'pjt', 'pjt':'pjt', 'pjtcode':'pjt', '프로젝트코드':'pjt',
+
+  // ── 영업현황이름 ─────────────────────────────
+  '영업현황이름':'name', '영업현황 이름':'name',
+  '프로젝트명':'name', '프로젝트 명':'name',
+  '사업명':'name', '사업 명':'name',
+
+  // ── 시공사 = 고객사 이름 ⭐ ──────────────────
+  '시공사':'partner',
+  '고객사':'partner', '고객사이름':'partner', '고객사 이름':'partner', '고객사명':'partner',
+  '파트너사':'partner', '파트너 사':'partner', '협력사':'partner',
+
+  // ── 사업구분 ─────────────────────────────────
+  '사업구분1':'biz1', '사업구분 1':'biz1',
+  '사업구분1-상세':'biz1d', '사업구분1_상세':'biz1d', '사업구분1상세':'biz1d', '사업구분1 상세':'biz1d',
+  '사업구분2':'biz2', '사업구분 2':'biz2',
+
+  // ── 대기번호 ─────────────────────────────────
+  '대기번호':'wait_no', '대기 번호':'wait_no',
+
+  // ── 충전기 관련 ──────────────────────────────
+  '충전기소유권':'ownership', '충전기 소유권':'ownership', '소유권':'ownership',
+  '충전기용량':'capacity',   '충전기 용량':'capacity',   '용량':'capacity',
+
+  // 충전기 대수 — 완속/급속 분리
+  '충전기대수(완속)':'qty_slow', '충전기 대수(완속)':'qty_slow', '충전기 대수 (완속)':'qty_slow',
+  '완속':'qty_slow', '완속대수':'qty_slow', '완속 대수':'qty_slow', 'AC':'qty_slow',
+  '충전기대수(급속)':'qty_fast', '충전기 대수(급속)':'qty_fast', '충전기 대수 (급속)':'qty_fast',
+  '급속':'qty_fast', '급속대수':'qty_fast', '급속 대수':'qty_fast', 'DC':'qty_fast',
+
+  // ── 충전기모델 = 제품 이름 ⭐ ────────────────
+  '충전기모델':'model', '충전기 모델':'model',
+  '모델':'model', '모델명':'model', '모델 명':'model',
+  '제품명':'model', '제품 명':'model',
+  '제품이름':'model', '제품 이름':'model',
+
+  // ── 설치 ─────────────────────────────────────
+  '설치유형':'inst_type', '설치 유형':'inst_type',
+
+  // ── 일자 ─────────────────────────────────────
+  '계약등록일':'reg_date',   '계약 등록일':'reg_date',
+  '영업승인일':'sales_date', '영업 승인일':'sales_date',
+  '환경부승인일자':'env_date','환경부 승인일자':'env_date', '환경부승인일':'env_date', '환경부 승인일':'env_date',
+
+  // ── 기타 ─────────────────────────────────────
+  '담당자':'manager', '담당 자':'manager',
+  '사업연도':'year', '사업 연도':'year', '연도':'year',
+};
+
+let xlsState = { aoa: [], headerRowIdx: 0, rows: [], headers: [], pjtKey: null, fileName: '', current: 'match', analysis: null, fileType: 'sales' };
+
+/* 파일명으로 종류 자동 감지 — 영업정보(sales) vs 충전기정보(charger) */
+function detectFileType(filename) {
+  const lower = (filename || '').toLowerCase();
+  // 영업정보 우선 체크 (충전기보다 먼저)
+  if (lower.includes('영업정보') || lower.includes('영업 정보') ||
+      lower.includes('영업현황') || lower.includes('sales')) return 'sales';
+  if (lower.includes('충전기정보') || lower.includes('충전기 정보') ||
+      lower.includes('충전기') || lower.includes('charger')) return 'charger';
+  return 'sales';  // 기본값 = 영업정보 (마스터)
+}
+
+function renderFileTypeInfo() {
+  const el = document.getElementById('xlsFileTypeInfo');
+  if (xlsState.fileType === 'sales') {
+    el.style.background = '#eff6ff';
+    el.style.color = 'var(--blue-text)';
+    el.innerHTML = `📋 <strong>영업정보 (마스터)</strong> — 이 파일의 PJT는 DB에 추가/업데이트됩니다. 신규 PJT도 등록 가능합니다.`;
+  } else {
+    el.style.background = '#f3f4f6';
+    el.style.color = 'var(--gray-700)';
+    el.innerHTML = `🔌 <strong>충전기정보 (보조)</strong> — 기존 PJT의 충전기 정보만 업데이트됩니다.<br>💡 <strong>영업정보 파일에 없는 PJT는 추가되지 않고 "건너뜀"으로 분류됩니다.</strong>`;
+  }
+}
+
+function onFileTypeChange() {
+  xlsState.fileType = document.getElementById('xlsFileType').value;
+  renderFileTypeInfo();
+  runAnalysis();
+}
+
+// 사용자가 수동으로 지정한 컬럼 매핑 (이번 세션 + localStorage에 저장 → 다음 업로드에서도 재사용)
+let USER_COL_MAP = (() => {
+  try { return JSON.parse(localStorage.getItem('user_col_map')) || {}; } catch { return {}; }
+})();
+
+function saveUserColMap() { localStorage.setItem('user_col_map', JSON.stringify(USER_COL_MAP)); }
+
+function resolveColMap(header) {
+  // 우선순위: 사용자 매핑 > 정규화 시스템 매핑 > 원본 시스템 매핑
+  return USER_COL_MAP[header] || XLS_COL_MAP[normalize(header)] || XLS_COL_MAP[header];
+}
+
+function normalize(s) { return String(s || '').trim().replace(/\s+/g, ''); }
+
+/* ─────────────────────────────────────────────
+   헤더 행 자동 감지 — 점수 기반 스마트 매칭
+   엑셀마다 헤더 위치 다름 (영업현황 16행, 충전기 14행 등)
+   알려진 컬럼명이 가장 많이 등장하는 행을 헤더로 인식
+───────────────────────────────────────────── */
+const KNOWN_HEADER_KEYWORDS = [
+  // 정확 매칭 (10점)
+  'pjt코드','프로젝트코드','pjtcode','pjt',
+  '영업현황이름','프로젝트명','사업명',
+  '시공사','고객사','고객사이름','고객사 이름','파트너사','협력사','파트너 사',
+  '사업구분1','사업구분 1','사업구분1-상세','사업구분1_상세','사업구분2',
+  '대기번호','대기번호 입력여부',
+  '충전기소유권','충전기용량','충전기 용량',
+  '충전기대수(완속)','충전기 대수(완속)','완속','완속대수',
+  '충전기대수(급속)','충전기 대수(급속)','급속','급속대수',
+  '충전기모델','모델명','제품명','제품이름','제품 이름',
+  '설치주소','설치유형','설치위치',
+  '계약등록일','계약 등록일','영업승인일','환경부승인일자','환경부 승인일자',
+  '담당자','사업연도',
+];
+
+const PARTIAL_KEYWORDS = ['pjt','프로젝트','충전기','사업구분','승인일','담당','고객사','모델','제품'];
+
+function detectHeaderRow(aoa) {
+  const SCAN_LIMIT = Math.min(30, aoa.length);  // 30행까지 스캔
+  let bestRow = 0;
+  let bestScore = 0;
+
+  for (let i = 0; i < SCAN_LIMIT; i++) {
+    const row = aoa[i] || [];
+    const nonEmpty = row.filter(c => String(c ?? '').trim()).length;
+    if (nonEmpty < 3) continue;  // 셀이 너무 적으면 헤더 후보 아님
+
+    let score = 0;
+    const cellTexts = row.map(c => normalize(c));
+
+    // ① 정확 매칭 = 각 10점
+    cellTexts.forEach(text => {
+      if (!text) return;
+      const t = text.toLowerCase();
+      if (KNOWN_HEADER_KEYWORDS.some(k => k.toLowerCase() === t)) score += 10;
+    });
+
+    // ② 부분 일치 = 각 3점
+    cellTexts.forEach(text => {
+      if (!text) return;
+      const t = text.toLowerCase();
+      if (PARTIAL_KEYWORDS.some(k => t.includes(k))) score += 3;
+    });
+
+    // ③ 셀이 5개 이상이면 +2 (헤더는 보통 컬럼이 많음)
+    if (nonEmpty >= 5) score += 2;
+    if (nonEmpty >= 10) score += 3;
+
+    // ④ 셀이 대부분 짧은 텍스트면 +2 (데이터 행은 보통 긴 값들)
+    const avgLen = cellTexts.reduce((s, c) => s + c.length, 0) / Math.max(nonEmpty, 1);
+    if (avgLen > 0 && avgLen < 15) score += 2;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestRow = i;
+    }
+  }
+
+  return bestRow;
+}
+
+/* AoA → 객체 배열로 변환 (지정한 헤더 행 사용) */
+function aoaToRows(aoa, headerRowIdx) {
+  const headers = (aoa[headerRowIdx] || []).map(h => {
+    const s = String(h ?? '').trim();
+    return s || `(빈컬럼${Math.random().toString(36).slice(2,5)})`;
+  });
+  const dataRows = aoa.slice(headerRowIdx + 1);
+  const rows = dataRows
+    .filter(r => r.some(c => String(c ?? '').trim()))  // 완전 빈 행 제거
+    .map(r => {
+      const obj = {};
+      headers.forEach((h, i) => {
+        let v = r[i];
+        if (v instanceof Date) v = v.toISOString().slice(0, 10);
+        obj[h] = v ?? '';
+      });
+      return obj;
+    });
+  return { headers, rows };
+}
+
+function onFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  showToast(`📤 "${file.name}" 분석 중...`);
+
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, { type: 'array', cellDates: true });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      // AoA (Array of Arrays) 방식으로 읽기 — 헤더 행 자유롭게 선택 가능
+      const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+
+      if (!aoa.length) { showToast('⚠ 엑셀에 데이터가 없습니다.'); return; }
+
+      const headerRowIdx = detectHeaderRow(aoa);
+      const fileType = detectFileType(file.name);
+      xlsState = { aoa, headerRowIdx, fileName: file.name, current: 'match', analysis: null, fileType };
+
+      // 파일 종류 UI 반영
+      document.getElementById('xlsFileType').value = fileType;
+      renderFileTypeInfo();
+
+      // UI: 헤더 행 선택 드롭다운 — 최대 30행까지 (미리보기 포함, 자동 선택 행에 ⭐ 표시)
+      const hSel = document.getElementById('xlsHeaderRow');
+      const SHOW_ROWS = Math.min(30, aoa.length);
+      hSel.innerHTML = aoa.slice(0, SHOW_ROWS).map((row, i) => {
+        const nonEmpty = row.filter(c => String(c).trim());
+        const preview = nonEmpty.slice(0, 5).map(c => String(c).trim().slice(0, 20)).join(' | ');
+        const star = i === headerRowIdx ? '⭐ ' : '';
+        const label = nonEmpty.length === 0 ? '(빈 행)' : `${preview}${nonEmpty.length > 5 ? ' ...' : ''}`;
+        return `<option value="${i}" ${i === headerRowIdx ? 'selected' : ''}>${star}${i + 1}행 [${nonEmpty.length}열]: ${label}</option>`;
+      }).join('');
+
+      document.getElementById('xlsFileName').textContent = `(${file.name})`;
+      rebuildFromHeader();
+      document.getElementById('xlsModal').classList.add('active');
+    } catch (err) {
+      console.error(err);
+      showToast(`❌ 엑셀 분석 실패: ${err.message}`, 4000);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+}
+
+/* 헤더 행이 바뀌면 rows·headers·pjtKey 모두 재구성 */
+function rebuildFromHeader() {
+  const { aoa } = xlsState;
+  const headerRowIdx = parseInt(document.getElementById('xlsHeaderRow').value) || 0;
+  const { headers, rows } = aoaToRows(aoa, headerRowIdx);
+
+  // PJT 코드 컬럼 자동 감지
+  const pjtKey = headers.find(h => /^(PJT코드|PJT Code|프로젝트코드|Project Code|pjt|pjt_code|pjtcode)$/i.test(normalize(h)))
+              || headers.find(h => /pjt|프로젝트/i.test(h))
+              || headers[0];
+
+  xlsState.headerRowIdx = headerRowIdx;
+  xlsState.headers = headers;
+  xlsState.rows = rows;
+  xlsState.pjtKey = pjtKey;
+
+  document.getElementById('xlsTotalRows').textContent = rows.length;
+  const colSel = document.getElementById('xlsPjtCol');
+  colSel.innerHTML = headers.map(h => `<option value="${h}" ${h === pjtKey ? 'selected' : ''}>${h}</option>`).join('');
+
+  runAnalysis();
+}
+
+function reAnalyze() {
+  const newHeaderRow = parseInt(document.getElementById('xlsHeaderRow').value) || 0;
+  if (newHeaderRow !== xlsState.headerRowIdx) {
+    rebuildFromHeader();
+    return;
+  }
+  xlsState.pjtKey = document.getElementById('xlsPjtCol').value;
+  runAnalysis();
+}
+
+/* 사용자가 수동으로 컬럼 매핑 선택 */
+function setManualMap(header, field) {
+  if (!field) {
+    delete USER_COL_MAP[header];
+  } else {
+    USER_COL_MAP[header] = field;
+  }
+  saveUserColMap();
+  showToast(field
+    ? `🔗 "${header}" → ${field} 매핑 저장됨 (다음 업로드에도 적용)`
+    : `❌ "${header}" 매핑 해제됨`, 2500);
+  runAnalysis();  // 매칭 결과 재계산
+}
+
+function runAnalysis() {
+  const { rows, pjtKey, fileType } = xlsState;
+  const matched = [];
+  const newRows = [];
+  const errors = [];
+  const skipped = [];  // 충전기정보 파일에 있지만 영업정보에 없는 PJT
+  const dupInBatch = new Map();
+
+  rows.forEach((row, idx) => {
+    const rawCode = String(row[pjtKey] || '').trim();
+    const code = normalizePjt(rawCode);
+
+    if (!code) {
+      errors.push({ rowNo: idx + 2, reason: 'PJT코드 비어있음', data: row });
+      return;
+    }
+    if (!/^[A-Z]+[-_]?\d+([-_]\d+)*$/i.test(code) && !/^HN\d+$/i.test(code)) {
+      errors.push({ rowNo: idx + 2, code, reason: '코드 형식이 올바르지 않음 (예: PJT-2026-0001)', data: row });
+      return;
+    }
+
+    if (dupInBatch.has(code)) {
+      const firstRow = dupInBatch.get(code);
+      errors.push({
+        rowNo: idx + 2, code,
+        reason: `엑셀 내 중복 — ${firstRow}행과 동일한 PJT코드 (이 행은 무시됨)`,
+        data: row,
+      });
+      return;
+    }
+    dupInBatch.set(code, idx + 2);
+
+    const existing = SAMPLE.find(s => normalizePjt(s.pjt) === code);
+    if (existing) {
+      const changes = computeChanges(existing, row);
+      matched.push({ pjt: code, existing, row, changes });
+    } else {
+      // ⭐ 파일 종류에 따라 분기:
+      // - 영업정보(sales) = 마스터 → 신규 PJT 추가 가능
+      // - 충전기정보(charger) = 보조 → 영업정보에 없으면 건너뜀
+      if (fileType === 'charger') {
+        skipped.push({ pjt: code, row, reason: '영업정보에 없는 PJT' });
+      } else {
+        newRows.push({ pjt: code, row });
+      }
+    }
+  });
+
+  xlsState.analysis = { matched, newRows, errors, skipped };
+
+  // 건너뜀 탭 표시 여부
+  const skippedBtn = document.getElementById('xlsTabSkippedBtn');
+  if (fileType === 'charger') {
+    skippedBtn.style.display = '';
+  } else {
+    skippedBtn.style.display = 'none';
+    // 영업정보로 바뀌면 현재 탭이 skipped였을 때 match로 복귀
+    if (xlsState.current === 'skipped') xlsState.current = 'match';
+  }
+  document.getElementById('xlsTabSkippedN').textContent = skipped.length;
+
+  // ── 자동 매핑된 컬럼 vs 매핑 안 된 컬럼 분류
+  const DB_FIELD_LABEL = {
+    name:'영업현황이름', partner:'시공사', biz1:'사업구분1', biz1d:'사업구분1-상세', biz2:'사업구분2',
+    wait_no:'대기번호', ownership:'충전기소유권', capacity:'충전기 용량',
+    qty_slow:'충전기 대수(완속)', qty_fast:'충전기 대수(급속)',
+    model:'충전기모델', inst_type:'설치유형', reg_date:'계약 등록일', sales_date:'영업승인일',
+    env_date:'환경부 승인일자', manager:'담당자', year:'사업연도',
+  };
+  const mappedCols = [];
+  const unmappedCols = [];
+  xlsState.headers.forEach(h => {
+    const field = resolveColMap(h);
+    if (field === pjtKey || h === pjtKey) return;  // PJT 코드 컬럼은 건너뜀
+    if (field && DB_FIELD_LABEL[field]) {
+      mappedCols.push(`<span style="background:#fff;padding:2px 8px;border-radius:4px;margin-right:6px;display:inline-block;margin-bottom:3px;border:1px solid #fde68a;"><strong>${h}</strong> → ${DB_FIELD_LABEL[field]}</span>`);
+    } else {
+      unmappedCols.push(h);
+    }
+  });
+
+  const infoEl = document.getElementById('xlsColMapInfo');
+  const listEl = document.getElementById('xlsColMapList');
+  if (mappedCols.length > 0) {
+    infoEl.style.display = '';
+    listEl.innerHTML = mappedCols.join('');
+  } else {
+    infoEl.style.display = 'none';
+  }
+
+  // ── 매핑되지 않은 컬럼 — 수동 매핑 드롭다운 제공
+  const unEl = document.getElementById('xlsUnmappedInfo');
+  const unListEl = document.getElementById('xlsUnmappedList');
+  if (unmappedCols.length > 0) {
+    unEl.style.display = '';
+    unListEl.innerHTML = unmappedCols.map(h => {
+      const sampleVal = xlsState.rows.find(r => String(r[h] ?? '').trim())?.[h] ?? '';
+      const sampleText = String(sampleVal).slice(0, 30);
+      return `
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed #fecaca;">
+          <span style="min-width:200px;max-width:260px;font-weight:700;color:#991b1b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${h}</span>
+          <span style="font-size:10px;color:var(--gray-500);min-width:140px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">예시: "${sampleText}"</span>
+          <span style="font-size:11px;color:#991b1b;">→</span>
+          <select onchange="setManualMap('${h.replace(/'/g, "\\'")}', this.value)" style="height:26px;padding:0 8px;border:1px solid #fca5a5;border-radius:5px;background:#fff;font-size:11px;font-weight:600;color:var(--gray-700);cursor:pointer;outline:none;">
+            <option value="">(매핑 안함)</option>
+            ${Object.entries(DB_FIELD_LABEL).map(([f, l]) => `<option value="${f}">${l}</option>`).join('')}
+          </select>
+        </div>`;
+    }).join('');
+  } else {
+    unEl.style.display = 'none';
+  }
+
+  // 카운트 표시
+  document.getElementById('xlsCntMatch').textContent = matched.length;
+  document.getElementById('xlsCntNew').textContent   = newRows.length;
+  document.getElementById('xlsCntErr').textContent   = errors.length;
+  document.getElementById('xlsTabMatchN').textContent = matched.length;
+  document.getElementById('xlsTabNewN').textContent   = newRows.length;
+  document.getElementById('xlsTabErrN').textContent   = errors.length;
+
+  renderXlsTab();
+  updateXlsFooter();
+}
+
+function computeChanges(existing, row) {
+  const changes = [];
+  Object.keys(row).forEach(h => {
+    const field = resolveColMap(h);
+    if (!field) return;
+    let newVal = row[h];
+    if (newVal instanceof Date) {
+      newVal = newVal.toISOString().slice(0, 10);
+    }
+    newVal = String(newVal ?? '').trim();
+    const oldVal = String(existing[field] ?? '').trim();
+    if (newVal !== '' && newVal !== oldVal) {
+      changes.push({ header: h, field, old: oldVal, new: newVal });
+    }
+  });
+  return changes;
+}
+
+function switchXlsTab(tab) {
+  xlsState.current = tab;
+  document.querySelectorAll('.xls-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  renderXlsTab();
+}
+
+function renderXlsTab() {
+  const body = document.getElementById('xlsBody');
+  const a = xlsState.analysis;
+  if (!a) { body.innerHTML = ''; return; }
+
+  if (xlsState.current === 'match') {
+    if (!a.matched.length) { body.innerHTML = '<div class="xls-empty">매칭된 행이 없습니다.</div>'; return; }
+    body.innerHTML = a.matched.map(m => `
+      <div class="xls-row match">
+        <div class="xls-row-head">
+          <span class="xls-row-pjt">${m.pjt}</span>
+          <span class="xls-row-name">${m.existing.name}</span>
+          <span class="xls-row-tag green">변경 ${m.changes.length}개 필드</span>
+        </div>
+        ${m.changes.length ? `<div class="xls-changes">
+          ${m.changes.map(c => `
+            <div class="xls-change-row">
+              <span class="xls-change-field">${c.header}</span>
+              <span class="xls-change-old">${c.old || '(비어있음)'}</span>
+              <span class="xls-change-arr">→</span>
+              <span class="xls-change-new">${c.new}</span>
+            </div>`).join('')}
+        </div>` : '<div style="font-size:11px;color:var(--gray-400);margin-top:4px;">변경 사항 없음 (모든 값 동일)</div>'}
+      </div>`).join('');
+  } else if (xlsState.current === 'new') {
+    if (!a.newRows.length) { body.innerHTML = '<div class="xls-empty">신규 행이 없습니다.</div>'; return; }
+    body.innerHTML = a.newRows.map(n => {
+      const preview = Object.keys(n.row).slice(0, 4).map(k =>
+        `<span style="font-size:10px;color:var(--gray-500);margin-right:8px;">${k}: <strong style="color:var(--gray-800);">${n.row[k]}</strong></span>`
+      ).join('');
+      return `
+        <div class="xls-row new">
+          <div class="xls-row-head">
+            <span class="xls-row-pjt">${n.pjt}</span>
+            <span class="xls-row-name">${n.row['영업현황이름'] || n.row['프로젝트명'] || '(이름 없음)'}</span>
+            <span class="xls-row-tag blue">DB에 신규 추가</span>
+          </div>
+          <div style="margin-top:6px;">${preview}</div>
+        </div>`;
+    }).join('');
+  } else if (xlsState.current === 'skipped') {
+    const list = a.skipped || [];
+    if (!list.length) { body.innerHTML = '<div class="xls-empty">건너뛴 행이 없습니다.</div>'; return; }
+    body.innerHTML = `
+      <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:7px;padding:10px 12px;font-size:11px;color:#78350f;margin-bottom:10px;">
+        💡 충전기정보 파일에 있지만 <strong>영업정보 파일에 없는 PJT</strong>입니다.<br>
+        영업정보 파일을 먼저 업로드해서 PJT를 등록한 후 이 파일을 다시 업로드해주세요.
+      </div>` + list.map(n => {
+      const preview = Object.keys(n.row).slice(0, 4).map(k =>
+        `<span style="font-size:10px;color:var(--gray-500);margin-right:8px;">${k}: <strong style="color:var(--gray-800);">${n.row[k]}</strong></span>`
+      ).join('');
+      return `
+        <div class="xls-row skipped">
+          <div class="xls-row-head">
+            <span class="xls-row-pjt">${n.pjt}</span>
+            <span class="xls-row-name">${n.row['영업현황이름'] || n.row['프로젝트명'] || '(이름 없음)'}</span>
+            <span class="xls-row-tag gray">⊘ ${n.reason}</span>
+          </div>
+          <div style="margin-top:6px;">${preview}</div>
+        </div>`;
+    }).join('');
+  } else {
+    if (!a.errors.length) { body.innerHTML = '<div class="xls-empty">오류 행이 없습니다.</div>'; return; }
+    body.innerHTML = a.errors.map(e => `
+      <div class="xls-row err">
+        <div class="xls-row-head">
+          <span class="xls-row-pjt" style="background:var(--danger-light);color:var(--danger);">엑셀 ${e.rowNo}행</span>
+          <span class="xls-row-name">${e.code || '(코드 없음)'}</span>
+          <span class="xls-row-tag red">오류</span>
+        </div>
+        <div class="xls-err-reason">⚠ ${e.reason}</div>
+      </div>`).join('');
+  }
+}
+
+function updateXlsFooter() {
+  const a = xlsState.analysis; if (!a) return;
+  const includeNew = document.getElementById('xlsOptNew').checked;
+  const isCharger = xlsState.fileType === 'charger';
+  // 충전기정보 파일이면 신규 추가 옵션 자동 비활성화
+  document.getElementById('xlsOptNew').disabled = isCharger;
+  document.getElementById('xlsOptNew').parentElement.style.opacity = isCharger ? '0.5' : '1';
+
+  const newCount = (includeNew && !isCharger) ? a.newRows.length : 0;
+  const total = a.matched.length + newCount;
+  const skippedCount = a.skipped?.length || 0;
+
+  document.getElementById('xlsFootInfo').innerHTML =
+    `적용 시 영향: <strong style="color:var(--green);">업데이트 ${a.matched.length}건</strong>` +
+    (newCount > 0 ? ` · <strong style="color:var(--blue-text);">신규 ${newCount}건</strong>` : '') +
+    (skippedCount > 0 ? ` · <span style="color:var(--gray-500);">건너뜀 ${skippedCount}건</span>` : '') +
+    (a.errors.length ? ` · <span style="color:var(--danger);">오류 ${a.errors.length}건</span>` : '');
+  document.getElementById('btnXlsApply').disabled = total === 0;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('xlsOptNew').addEventListener('change', updateXlsFooter);
+});
+
+function closeXlsModal() {
+  document.getElementById('xlsModal').classList.remove('active');
+}
+
+function applyXlsMatching() {
+  const a = xlsState.analysis;
+  if (!a) return;
+  const includeNew = document.getElementById('xlsOptNew').checked;
+
+  // 매칭 행 → 기존 데이터 업데이트
+  let updCnt = 0, autoDoneCnt = 0;
+  a.matched.forEach(m => {
+    m.changes.forEach(c => {
+      const item = SAMPLE.find(s => s.pjt === m.pjt);
+      if (item) {
+        item[c.field] = c.new;
+        if (c.field === 'qty_slow' || c.field === 'qty_fast') item[c.field] = parseInt(c.new) || c.new;
+      }
+    });
+    if (m.changes.length) updCnt++;
+    // ⭐ 매핑 안 된 엑셀 컬럼도 원본 컬럼명으로 보존 (다운로드 시 포함됨)
+    const item = SAMPLE.find(s => s.pjt === m.pjt);
+    if (item) {
+      Object.keys(m.row).forEach(h => {
+        const field = resolveColMap(h);
+        if (!field) {
+          let v = m.row[h];
+          if (v instanceof Date) v = v.toISOString().slice(0, 10);
+          const sv = String(v ?? '').trim();
+          if (sv) item[h] = sv;
+        }
+      });
+      const before = item.reg_status;
+      syncRegStatus(item);
+      if (before !== 'done' && item.reg_status === 'done') autoDoneCnt++;
+    }
+  });
+
+  // 신규 행 추가 (중복 방어 — 만약 동시에 같은 PJT 있으면 update로 처리)
+  // ⭐ 충전기정보(charger) 파일은 절대 신규 추가 안 함 (마스터는 영업정보만)
+  const isCharger = xlsState.fileType === 'charger';
+  let newCnt = 0;
+  if (includeNew && !isCharger) {
+    a.newRows.forEach(n => {
+      const code = normalizePjt(n.pjt);
+      // 혹시 모를 중복: 이미 있으면 신규 추가 대신 업데이트
+      if (SAMPLE.some(s => normalizePjt(s.pjt) === code)) return;
+
+      const item = {
+        pjt: code, name: '', partner: '', biz1: '', biz1d: '', biz2: '',
+        wait_no: '', wait_yn: 'N', ownership: '', capacity: '',
+        qty_slow: 0, qty_fast: 0, model: '',
+        inst_type: '', reg_date: '', sales_date: '', env_date: '',
+        manager: CURRENT_USER, year: String(new Date().getFullYear()),
+        reg_status: 'pending',
+      };
+      Object.keys(n.row).forEach(h => {
+        const field = resolveColMap(h);
+        let v = n.row[h];
+        if (v instanceof Date) v = v.toISOString().slice(0, 10);
+        const sv = String(v ?? '').trim();
+        if (field) {
+          item[field] = sv;
+        } else if (sv) {
+          // ⭐ 매핑 안 된 엑셀 컬럼도 원본 헤더명으로 저장 (다운로드 시 함께 출력)
+          item[h] = sv;
+        }
+      });
+      if (item.qty_slow) item.qty_slow = parseInt(item.qty_slow) || 0;
+      if (item.qty_fast) item.qty_fast = parseInt(item.qty_fast) || 0;
+      syncRegStatus(item);
+      if (item.reg_status === 'done') autoDoneCnt++;
+      SAMPLE.push(item);
+      newCnt++;
+    });
+  }
+
+  // ⭐ 적용 후 한 번 더 중복 정리 (안전망)
+  dedupeSample({ merge: true });
+
+  // localStorage에 저장 (새로고침해도 유지)
+  saveBpmsData();
+
+  // 필터 옵션 동적 갱신 (새로 들어온 시공사·담당자·연도 등 반영)
+  populateFilterOptions();
+
+  closeXlsModal();
+  const autoMsg = autoDoneCnt > 0 ? ` · 🌐 대기번호로 ${autoDoneCnt}건 자동 등록완료` : '';
+  const skippedCnt = a.skipped?.length || 0;
+  const skipMsg = skippedCnt > 0 ? ` · ⊘ 영업정보에 없어 ${skippedCnt}건 건너뜀` : '';
+  showToast(`✅ 적용 완료: 업데이트 ${updCnt}건${newCnt ? ` · 신규 ${newCnt}건` : ''}${skipMsg}${autoMsg}`, 5500);
+
+  // 표 자동 검색 (전체 보여주기)
+  handleSearch();
+}
+
+/* ─────────────────────────────────────────────
+   엑셀 다운로드 — 백데이터의 모든 필드 포함
+   (매핑된 표준 필드 + 사용자가 업로드한 추가 컬럼 모두)
+───────────────────────────────────────────── */
+function handleDownload() {
+  if (!filteredData.length) { showToast('⚠ 먼저 검색을 수행하세요.'); return; }
+  showToast(`📥 ${filteredData.length}건 엑셀 다운로드 중...`);
+  setTimeout(() => {
+    // ── 1) 표준 DB 필드 (순서 고정)
+    const STANDARD_FIELDS = [
+      { key: 'reg_status', label: '누리집등록가능' },
+      { key: 'pjt',        label: 'PJT코드' },
+      { key: 'name',       label: '영업현황이름' },
+      { key: 'partner',    label: '시공사' },
+      { key: 'biz1',       label: '사업구분1' },
+      { key: 'biz1d',      label: '사업구분1-상세' },
+      { key: 'biz2',       label: '사업구분2' },
+      { key: 'wait_no',    label: '대기번호' },
+      { key: 'wait_yn',    label: '대기번호입력여부' },
+      { key: 'ownership',  label: '충전기소유권' },
+      { key: 'capacity',   label: '충전기 용량' },
+      { key: 'qty_slow',   label: '충전기 대수(완속)' },
+      { key: 'qty_fast',   label: '충전기 대수(급속)' },
+      { key: 'model',      label: '충전기모델' },
+      { key: 'inst_type',  label: '설치유형' },
+      { key: 'reg_date',   label: '계약 등록일' },
+      { key: 'sales_date', label: '영업승인일' },
+      { key: 'env_date',   label: '환경부 승인일자' },
+      { key: 'manager',    label: '담당자' },
+      { key: 'year',       label: '사업연도' },
+    ];
+
+    // ── 2) 추가 필드 수집 (업로드 시 저장된 비표준 컬럼들)
+    const standardKeys = new Set(STANDARD_FIELDS.map(f => f.key));
+    const extraKeys = new Set();
+    filteredData.forEach(item => {
+      Object.keys(item).forEach(k => {
+        if (!standardKeys.has(k) && !k.startsWith('_')) extraKeys.add(k);
+      });
+    });
+
+    const allFields = [
+      ...STANDARD_FIELDS,
+      ...[...extraKeys].sort().map(k => ({ key: k, label: k })),
+    ];
+
+    // ── 3) CSV escape 처리 (쉼표·줄바꿈·따옴표 포함 시 quoting)
+    const escapeCsv = (v) => {
+      const s = String(v ?? '');
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    };
+
+    // ── 4) 헤더 + 행 생성
+    const headers = allFields.map(f => escapeCsv(f.label));
+    const rows = filteredData.map(r =>
+      allFields.map(f => {
+        let v = r[f.key];
+        if (f.key === 'reg_status') v = REG_STATUS_MAP[v]?.label || '';
+        return escapeCsv(v);
+      }).join(',')
+    );
+
+    // ── 5) BOM 추가 (한글 깨짐 방지) + 다운로드
+    const csv = '﻿' + [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `BPMS_조회결과_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    const extraCnt = extraKeys.size;
+    showToast(`✅ ${filteredData.length}건 다운로드 완료 (${allFields.length}컬럼${extraCnt > 0 ? ` · 추가 컬럼 ${extraCnt}개 포함` : ''})`, 4000);
+  }, 600);
+}
+
+/* ── 스피너: tbody 안에 로딩 행으로 표시 ── */
+function showSpinner(on) {
+  const tbody  = document.getElementById('tableBody');
+  const footer = document.getElementById('tableFooter');
+  if (on) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="18" style="padding:0;border:none;">
+          <div class="spinner-wrap" style="display:block;">
+            <div class="spinner"></div>
+            <div style="font-size:13px;color:var(--gray-400);">데이터를 불러오는 중...</div>
+          </div>
+        </td>
+      </tr>`;
+    footer.style.display = 'none';
+  }
+}
+
+/* ── 토스트 ── */
+function showToast(msg, dur = 3000) {
+  const wrap = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => { el.classList.add('fadeout'); setTimeout(() => el.remove(), 350); }, dur);
+}
+
+/* ─────────────────────────────────────────────
+   BPMS 동기화 — 전역 잠금 (5명이 같은 데이터 공유)
+   실제 운영시: 서버/DB로 대체. 지금은 localStorage 시뮬레이션.
+───────────────────────────────────────────── */
+const CURRENT_USER = '김담당';
+const SYNC_KEY = 'bpms_sync_state';
+
+function getSyncState() {
+  try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; }
+  catch { return {}; }
+}
+function setSyncState(s) { localStorage.setItem(SYNC_KEY, JSON.stringify(s)); }
+
+function fmtTimeAgo(ts) {
+  if (!ts) return '';
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return '방금 전';
+  if (diff < 3600) return `${Math.floor(diff/60)}분 전`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}시간 전`;
+  return `${Math.floor(diff/86400)}일 전`;
+}
+function fmtTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function renderSyncBanner() {
+  const s = getSyncState();
+  const banner = document.getElementById('syncBanner');
+  const icon   = document.getElementById('syncIcon');
+  const title  = document.getElementById('syncTitle');
+  const desc   = document.getElementById('syncDesc');
+  const bar    = document.getElementById('syncProgressBar');
+  const btn    = document.querySelector('.btn-bpms');
+
+  banner.className = 'sync-banner';
+
+  if (s.isRunning) {
+    // 진행 중
+    const elapsed = (Date.now() - s.runningStartedAt) / 1000;
+    const pct = Math.min(Math.round(elapsed / 8 * 100), 95);  // 8초 가정
+    banner.classList.add('running');
+    icon.textContent = '⚙';
+    if (s.runningBy === CURRENT_USER) {
+      title.innerHTML = `BPMS 보고서 갱신 진행 중... <span class="who">${s.runningBy} (나)</span>`;
+      desc.textContent = '잠시만 기다려 주세요. 완료되면 모든 담당자 화면에 자동 반영됩니다.';
+    } else {
+      title.innerHTML = `<span class="who">${s.runningBy}</span> 님이 BPMS 갱신 중... (${fmtTime(s.runningStartedAt)} 시작)`;
+      desc.textContent = '완료될 때까지 BPMS 불러오기 버튼이 일시적으로 잠겼습니다. 곧 자동 갱신됩니다.';
+    }
+    bar.style.width = pct + '%';
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
+  } else if (s.lastRefreshedAt) {
+    const isFresh = (Date.now() - s.lastRefreshedAt) < 600 * 1000;  // 10분
+    banner.classList.add(isFresh ? 'fresh' : '');
+    icon.textContent = isFresh ? '✅' : '🔄';
+    title.innerHTML = `BPMS 마지막 갱신: <span class="who">${s.lastRefreshedBy}</span> · ${fmtTime(s.lastRefreshedAt)} (${fmtTimeAgo(s.lastRefreshedAt)})`;
+    desc.textContent = isFresh
+      ? '최근에 갱신되었습니다. 다시 불러올 필요가 없을 수 있습니다.'
+      : '5명의 담당자가 같은 BPMS 보고서 데이터를 공유합니다. 1명만 실행하면 모두 갱신됩니다.';
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; }
+  } else {
+    icon.textContent = '🔄';
+    title.textContent = 'BPMS 보고서 동기화 상태';
+    desc.textContent = '아직 BPMS 데이터를 불러온 적이 없습니다. [📡 BPMS 불러오기] 버튼을 눌러 시작하세요.';
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; }
+  }
+}
+
+// 다른 사용자의 변경을 실시간 감지 (1초 폴링 + storage 이벤트)
+setInterval(renderSyncBanner, 1000);
+window.addEventListener('storage', e => { if (e.key === SYNC_KEY) renderSyncBanner(); });
+
+/* ── BPMS 불러오기 (잠금 적용) ── */
+function handleBpmsLoad() {
+  const s = getSyncState();
+
+  // 다른 사람이 실행 중인지 확인
+  if (s.isRunning) {
+    if (s.runningBy === CURRENT_USER) {
+      showToast('⚙ 이미 본인이 실행 중입니다. 잠시만 기다려주세요.');
+    } else {
+      const elapsed = Math.round((Date.now() - s.runningStartedAt) / 1000);
+      showToast(`⚠ ${s.runningBy}님이 ${elapsed}초 전부터 실행 중입니다. 완료 후 자동 갱신됩니다.`, 4000);
+    }
+    return;
+  }
+
+  // 최근 10분 이내 갱신되었으면 확인
+  if (s.lastRefreshedAt && (Date.now() - s.lastRefreshedAt) < 600 * 1000) {
+    const who = s.lastRefreshedBy;
+    const ago = fmtTimeAgo(s.lastRefreshedAt);
+    if (!confirm(`최근 ${who}님이 ${ago}에 갱신했습니다.\n그래도 다시 불러오시겠습니까?`)) return;
+  }
+
+  // 잠금 설정
+  setSyncState({
+    isRunning: true,
+    runningBy: CURRENT_USER,
+    runningStartedAt: Date.now(),
+    lastRefreshedBy: s.lastRefreshedBy,
+    lastRefreshedAt: s.lastRefreshedAt,
+  });
+  renderSyncBanner();
+  const steps = [
+    'BPMS 서버 연결 확인',
+    '보고서뷰 세션 인증',
+    '데이터 조회 및 파싱',
+    'DB 업데이트 처리',
+    '동기화 완료',
+  ];
+
+  // 모달 초기화
+  document.getElementById('bpmsModalTitle').textContent = 'BPMS 데이터 불러오는 중...';
+  document.getElementById('bpmsModalSub').textContent   = '보고서뷰에서 최신 데이터를 가져옵니다';
+  document.getElementById('bpmsProgressBar').style.width = '0%';
+  document.getElementById('bpmsResult').style.display = 'none';
+  document.getElementById('bpmsOkBtn').style.display  = 'none';
+  document.getElementById('bpmsCloseBtn').textContent = '닫기';
+
+  const stepsEl = document.getElementById('bpmsSteps');
+  stepsEl.innerHTML = steps.map((s, i) =>
+    `<div class="bpms-step" id="bs${i}"><span class="bpms-step-icon">○</span>${s}</div>`
+  ).join('');
+
+  document.getElementById('bpmsModal').classList.add('active');
+
+  let i = 0;
+  function next() {
+    if (i < steps.length) {
+      if (i > 0) {
+        const prev = document.getElementById(`bs${i-1}`);
+        prev.className = 'bpms-step done';
+        prev.querySelector('.bpms-step-icon').textContent = '✓';
+      }
+      const cur = document.getElementById(`bs${i}`);
+      cur.className = 'bpms-step active';
+      cur.querySelector('.bpms-step-icon').textContent = '▷';
+      document.getElementById('bpmsProgressBar').style.width =
+        `${Math.round((i + 1) / steps.length * 100)}%`;
+      i++;
+      setTimeout(next, 650 + Math.random() * 350);
+    } else {
+      // 완료
+      const last = document.getElementById(`bs${steps.length - 1}`);
+      last.className = 'bpms-step done';
+      last.querySelector('.bpms-step-icon').textContent = '✓';
+      document.getElementById('bpmsProgressBar').style.width = '100%';
+
+      // 결과 시뮬레이션
+      const newCnt  = Math.floor(Math.random() * 8) + 3;
+      const updCnt  = Math.floor(Math.random() * 5) + 1;
+      const resultEl = document.getElementById('bpmsResult');
+      resultEl.innerHTML = `
+        ✅ DB 업데이트 완료<br>
+        <strong>${newCnt + updCnt}</strong>건 처리 &nbsp;
+        <span style="font-size:12px;color:#9d174d;">( 신규 ${newCnt}건 · 수정 ${updCnt}건 )</span>`;
+      resultEl.style.display = 'block';
+
+      document.getElementById('bpmsModalTitle').textContent = 'BPMS 불러오기 완료!';
+      document.getElementById('bpmsModalSub').textContent   = '데이터가 DB에 반영되었습니다';
+      document.getElementById('bpmsOkBtn').style.display    = 'inline-block';
+      document.getElementById('bpmsCloseBtn').textContent   = '닫기';
+
+      // ⭐ 전역 잠금 해제 + 갱신 정보 저장 (모든 담당자에 공유)
+      setSyncState({
+        isRunning: false,
+        runningBy: null,
+        runningStartedAt: null,
+        lastRefreshedBy: CURRENT_USER,
+        lastRefreshedAt: Date.now(),
+      });
+      renderSyncBanner();
+    }
+  }
+  setTimeout(next, 300);
+}
+
+function closeBpmsModal() {
+  document.getElementById('bpmsModal').classList.remove('active');
+}
+
+/* ── BPMS 첨부파일 다운로드 ── */
+function handleBpmsFileDownload() {
+  const checked = document.querySelectorAll('.row-chk:checked');
+  if (checked.length === 0) {
+    showToast('⚠ 첨부파일을 다운로드할 프로젝트를 먼저 선택하세요.');
+    return;
+  }
+
+  // 모달 재활용 (BPMS 불러오기 모달과 동일 UI 재사용)
+  document.getElementById('bpmsModalTitle').textContent = `BPMS 첨부파일 다운로드 중... (${checked.length}건)`;
+  document.getElementById('bpmsModalSub').textContent   = `NAS에 저장 + 자동 분류·파싱 + DB 업데이트`;
+  document.getElementById('bpmsProgressBar').style.width = '0%';
+  document.getElementById('bpmsResult').style.display = 'none';
+  document.getElementById('bpmsOkBtn').style.display  = 'none';
+  document.getElementById('bpmsCloseBtn').textContent = '닫기';
+
+  const steps = [
+    `${checked.length}개 프로젝트 첨부파일 목록 조회`,
+    `NAS 폴더 일괄 다운로드 (예상 ${checked.length * 25}개 파일)`,
+    `파일명 키워드 기반 7종 자동 분류`,
+    `현장실사확인서 · 계약서 PDF 텍스트 추출`,
+    `사업자등록증 OCR 처리`,
+    `DB 업데이트 + 검수 대상 분류`,
+  ];
+
+  const stepsEl = document.getElementById('bpmsSteps');
+  stepsEl.innerHTML = steps.map((s, i) =>
+    `<div class="bpms-step" id="dl${i}"><span class="bpms-step-icon">○</span>${s}</div>`
+  ).join('');
+
+  document.getElementById('bpmsModal').classList.add('active');
+
+  let i = 0;
+  function next() {
+    if (i < steps.length) {
+      if (i > 0) {
+        const prev = document.getElementById(`dl${i-1}`);
+        prev.className = 'bpms-step done';
+        prev.querySelector('.bpms-step-icon').textContent = '✓';
+      }
+      const cur = document.getElementById(`dl${i}`);
+      cur.className = 'bpms-step active';
+      cur.querySelector('.bpms-step-icon').textContent = '▷';
+      document.getElementById('bpmsProgressBar').style.width =
+        `${Math.round((i + 1) / steps.length * 100)}%`;
+      i++;
+      setTimeout(next, 800 + Math.random() * 400);
+    } else {
+      const last = document.getElementById(`dl${steps.length - 1}`);
+      last.className = 'bpms-step done';
+      last.querySelector('.bpms-step-icon').textContent = '✓';
+      document.getElementById('bpmsProgressBar').style.width = '100%';
+
+      // 결과 시뮬레이션: 일부는 ready, 일부는 review 상태로 분류
+      const total  = checked.length;
+      const ready  = Math.floor(total * 0.78);
+      const review = total - ready;
+
+      // 체크된 행들의 상태를 업데이트 (시뮬레이션)
+      checked.forEach((c, idx) => {
+        const tr = c.closest('tr');
+        const pjt = tr.dataset.pjt;
+        const item = SAMPLE.find(s => s.pjt === pjt);
+        if (item && item.reg_status !== 'done') {
+          item.reg_status = idx < ready ? 'ready' : 'review';
+        }
+      });
+
+      const resultEl = document.getElementById('bpmsResult');
+      resultEl.innerHTML = `
+        ✅ 첨부파일 다운로드 + DB 업데이트 완료<br>
+        <strong>${total}</strong>건 처리 &nbsp;
+        <span style="font-size:12px;color:#9d174d;">
+          ( ✅ 등록 준비 ${ready}건 · ⚠ 검수 필요 ${review}건 )
+        </span>`;
+      resultEl.style.display = 'block';
+
+      document.getElementById('bpmsModalTitle').textContent = '다운로드 + DB 업데이트 완료!';
+      document.getElementById('bpmsModalSub').textContent   = review > 0
+        ? `⚠ ${review}건은 담당자 검수가 필요합니다. 검수 화면으로 이동하세요.`
+        : `🎉 모든 프로젝트가 누리집 등록 준비 완료 상태입니다.`;
+      document.getElementById('bpmsOkBtn').style.display    = 'inline-block';
+      document.getElementById('bpmsOkBtn').textContent      = review > 0 ? '검수 화면으로 →' : '확인';
+      document.getElementById('bpmsOkBtn').onclick = () => {
+        document.getElementById('bpmsModal').classList.remove('active');
+        if (review > 0) {
+          showToast('🔧 검수 화면으로 이동합니다...');
+          setTimeout(() => { window.location.href = 'files.html'; }, 800);
+        }
+      };
+
+      // 표 새로고침
+      renderTable();
+    }
+  }
+  setTimeout(next, 300);
+}
+
+/* ── 누리집 등록 — 작업 큐에 추가 ── */
+function handleNurijiRegister() {
+  const checked = document.querySelectorAll('.row-chk:checked');
+  if (checked.length === 0) {
+    showToast('⚠ 누리집 등록할 프로젝트를 먼저 선택하세요. (체크박스 체크)');
+    return;
+  }
+
+  // 상태 분류
+  const groups = { ready: [], review: [], pending: [], done: [] };
+  checked.forEach(c => {
+    const status = c.dataset.status || 'pending';
+    const pjt = c.closest('tr').dataset.pjt;
+    groups[status]?.push(pjt);
+  });
+
+  // 등록 불가 체크
+  const blocked = groups.review.length + groups.pending.length;
+  if (blocked > 0) {
+    const msg = [];
+    if (groups.pending.length) msg.push(`⬜ 미처리 ${groups.pending.length}건`);
+    if (groups.review.length)  msg.push(`⚠ 검수 필요 ${groups.review.length}건`);
+    if (groups.done.length)    msg.push(`🌐 이미 등록 ${groups.done.length}건`);
+    showToast(`❌ 등록 불가: ${msg.join(' · ')}`, 4500);
+    return;
+  }
+  if (groups.ready.length === 0) {
+    showToast('⚠ "등록 준비 완료" 상태인 프로젝트를 선택하세요.', 3500);
+    return;
+  }
+
+  // 큐에 작업 추가
+  const jobs = getJobs();
+  const now = Date.now();
+  groups.ready.forEach((pjt, i) => {
+    const item = SAMPLE.find(s => s.pjt === pjt);
+    jobs.push({
+      id: 'j_' + now + '_' + Math.random().toString(36).slice(2,6),
+      type: 'nuriji_register',
+      manager: CURRENT_USER,
+      pjt: pjt,
+      name: item?.name || pjt,
+      status: 'pending',
+      scheduledAt: now + i,
+      priority: 5,
+    });
+  });
+  setJobs(jobs);
+
+  // 알림 추가
+  addNotif({
+    type: 'info', manager: CURRENT_USER,
+    title: `${groups.ready.length}건 누리집 등록 예약`,
+    msg: `작업 큐에 순차 처리되도록 추가됨`,
+  });
+
+  showToast(`✅ ${groups.ready.length}건이 작업 큐에 추가되었습니다. 잠시 후 자동 시작됩니다.`, 3500);
+  setTimeout(() => { window.location.href = 'queue.html'; }, 1500);
+}
+
+/* ── 작업 큐·알림 공유 함수 (queue.html과 동일 로직) ── */
+const JOBS_KEY  = 'queue_jobs';
+const NOTIF_KEY = 'queue_notifs';
+function getJobs()    { try { return JSON.parse(localStorage.getItem(JOBS_KEY))  || []; } catch { return []; } }
+function setJobs(a)   { localStorage.setItem(JOBS_KEY, JSON.stringify(a)); }
+function getNotifs()  { try { return JSON.parse(localStorage.getItem(NOTIF_KEY))|| []; } catch { return []; } }
+function setNotifs(a) { localStorage.setItem(NOTIF_KEY, JSON.stringify(a)); }
+function addNotif(n)  {
+  const list = getNotifs();
+  list.unshift({ id:'n_'+Date.now()+Math.random().toString(36).slice(2,5), timestamp:Date.now(), read:false, ...n });
+  if (list.length > 50) list.splice(50);
+  setNotifs(list);
+}
+function fmtTimeAgo(ts) {
+  const d = Math.floor((Date.now() - ts) / 1000);
+  if (d < 60) return '방금 전';
+  if (d < 3600) return `${Math.floor(d/60)}분 전`;
+  if (d < 86400) return `${Math.floor(d/3600)}시간 전`;
+  return `${Math.floor(d/86400)}일 전`;
+}
+
+/* ── 알림 종 드롭다운 ── */
+function renderBell() {
+  const list = getNotifs();
+  const unread = list.filter(n => !n.read).length;
+  const btn = document.getElementById('notifBtn');
+  const badge = document.getElementById('notifBadge');
+  btn.classList.toggle('has-unread', unread > 0);
+  badge.style.display = unread > 0 ? 'flex' : 'none';
+  badge.textContent = unread > 9 ? '9+' : unread;
+
+  const visible = list.filter(n => n.manager === CURRENT_USER).slice(0, 8);
+  const listEl = document.getElementById('notifList');
+  if (!visible.length) { listEl.innerHTML = `<div class="notif-empty">📭 알림이 없습니다</div>`; return; }
+  listEl.innerHTML = visible.map(n => {
+    const icon = n.type === 'success' ? '✅' : n.type === 'error' ? '❌' : n.type === 'warning' ? '⚠️' : '⚙';
+    return `
+      <div class="notif-item ${n.read ? '' : 'unread'}" onclick="onNotifClick('${n.id}')">
+        <div class="ni-icon">${icon}</div>
+        <div class="ni-body">
+          <div class="ni-title">${n.title}</div>
+          <div class="ni-msg">${n.msg || ''}</div>
+          <div class="ni-time">👤 ${n.manager} · ${fmtTimeAgo(n.timestamp)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+function toggleNotifDropdown(e) {
+  e?.stopPropagation();
+  document.getElementById('notifDropdown').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  const dd = document.getElementById('notifDropdown');
+  if (dd?.classList.contains('open') && !e.target.closest('.notif-wrap')) dd.classList.remove('open');
+});
+function onNotifClick(id) {
+  const list = getNotifs();
+  const n = list.find(x => x.id === id);
+  if (n) { n.read = true; setNotifs(list); renderBell(); }
+}
+function markAllRead() {
+  const list = getNotifs();
+  list.forEach(n => n.read = true);
+  setNotifs(list);
+  showToast('✓ 모든 알림을 읽음 처리했습니다.');
+  renderBell();
+}
+// 1초마다 알림 갱신
+setInterval(renderBell, 1000);
+window.addEventListener('storage', e => { if (e.key === NOTIF_KEY) renderBell(); });
+
+/* 기본 날짜 설정 + 동기화 배너 초기 렌더 */
+window.addEventListener('DOMContentLoaded', () => {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth()+1).padStart(2,'0');
+  document.getElementById('f_date_from').value = `${y}-${m}-01`;
+  document.getElementById('f_date_to').value   = today.toISOString().slice(0,10);
+  renderSyncBanner();
+  renderBell();
+  updateTotalCount();
+  populateFilterOptions();  // ⭐ 실제 데이터로 필터 옵션 채우기
+  renderTableHeader();      // ⭐ 사용자 컬럼 설정 적용
+});
+</script>
+</body>
+</html>

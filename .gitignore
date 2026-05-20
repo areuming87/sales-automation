@@ -1,0 +1,28 @@
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Temp
+*.tmp
+*.bak
+*~
+
+# 실제 BPMS 데이터 (혹시 이 폴더에 엑셀 두면 GitHub에 안 올라가도록)
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+
+# 인증서 / 자격증명
+*.pfx
+*.p12
+*.pem
+*.key
+credentials.json
+.env

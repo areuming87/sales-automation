@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>작업 큐 · 영업현황 자동화</title>
+  <style>
+    :root {
+      --primary:#2563eb; --primary-dark:#1d4ed8; --primary-light:#eff6ff;
+      --yellow:#fbbf24; --yellow-bg:#fef9c3; --yellow-border:#f59e0b; --yellow-text:#78350f;
+      --blue-bg:#dbeafe; --blue-border:#3b82f6; --blue-text:#1e3a8a;
+      --green:#16a34a; --green-bg:#dcfce7; --green-dark:#15803d;
+      --pink:#db2777; --pink-bg:#fdf2f8;
+      --purple:#9333ea; --purple-bg:#f3e8ff;
+      --orange:#ea580c; --orange-bg:#ffedd5;
+      --danger:#dc2626; --danger-light:#fee2e2;
+      --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb;
+      --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280;
+      --gray-600:#4b5563; --gray-700:#374151; --gray-800:#1f2937; --gray-900:#111827;
+      --header-h:60px; --nav-h:42px;
+      --radius:10px;
+      --shadow:0 1px 3px rgba(0,0,0,.10),0 1px 2px rgba(0,0,0,.06);
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Malgun Gothic','Apple SD Gothic Neo',-apple-system,sans-serif;background:var(--gray-100);color:var(--gray-800);font-size:13px;}
+
+    /* HEADER */
+    header{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:#fff;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;padding:0 20px;gap:12px;z-index:100;box-shadow:var(--shadow);}
+    .logo-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--primary),#60a5fa);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;flex-shrink:0;}
+    .logo-text{font-size:15px;font-weight:800;color:var(--gray-900);}
+    .header-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+    .user-chip{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--gray-600);cursor:pointer;padding:4px 8px;border-radius:7px;transition:background .12s;}
+    .user-chip:hover{background:var(--gray-100);}
+    .user-dot{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--primary),#60a5fa);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+    .role-badge{
+      font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;
+      background:var(--gray-100);color:var(--gray-500);
+    }
+    .role-badge.admin{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#fff;}
+
+    /* 알림 종 */
+    .notif-wrap{position:relative;}
+    .notif-btn{
+      width:34px;height:34px;border-radius:8px;
+      background:var(--gray-50);border:1px solid var(--gray-200);
+      font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+      position:relative;transition:all .15s;
+    }
+    .notif-btn:hover{background:var(--gray-100);}
+    .notif-btn.has-unread{background:var(--primary-light);border-color:var(--primary);}
+    .notif-badge{
+      position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;
+      background:var(--danger);color:#fff;font-size:10px;font-weight:800;
+      display:flex;align-items:center;justify-content:center;padding:0 5px;
+      box-shadow:0 0 0 2px #fff;
+    }
+    .notif-dropdown{
+      display:none;position:absolute;top:42px;right:0;width:340px;
+      background:#fff;border-radius:12px;box-shadow:0 12px 28px rgba(0,0,0,.18);
+      border:1px solid var(--gray-200);overflow:hidden;z-index:200;
+    }
+    .notif-dropdown.open{display:block;}
+    .notif-head{padding:12px 14px;border-bottom:1px solid var(--gray-100);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;}
+    .notif-title{font-size:13px;font-weight:800;color:var(--gray-800);}
+    .notif-mark{background:none;border:none;font-size:11px;color:var(--primary);cursor:pointer;font-weight:600;}
+    .notif-mark:hover{text-decoration:underline;}
+    .notif-list{max-height:360px;overflow-y:auto;}
+    .notif-empty{padding:32px 16px;text-align:center;color:var(--gray-400);font-size:12px;}
+    .notif-item{padding:10px 14px;border-bottom:1px solid var(--gray-100);display:flex;gap:10px;cursor:pointer;transition:background .12s;}
+    .notif-item:hover{background:var(--gray-50);}
+    .notif-item.unread{background:#eff6ff;}
+    .notif-item:last-child{border-bottom:none;}
+    .ni-icon{font-size:18px;flex-shrink:0;width:24px;text-align:center;}
+    .ni-body{flex:1;min-width:0;}
+    .ni-title{font-size:12px;font-weight:700;color:var(--gray-800);}
+    .ni-msg{font-size:11px;color:var(--gray-500);margin-top:2px;}
+    .ni-time{font-size:10px;color:var(--gray-400);margin-top:3px;}
+    .notif-foot{padding:10px;border-top:1px solid var(--gray-100);text-align:center;background:var(--gray-50);}
+    .notif-foot a{font-size:12px;color:var(--primary);font-weight:700;text-decoration:none;}
+    .notif-foot a:hover{text-decoration:underline;}
+
+    /* SUB NAV */
+    .sub-nav{position:fixed;top:var(--header-h);left:0;right:0;height:var(--nav-h);background:#fff;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;padding:0 20px;gap:4px;z-index:99;}
+    .nav-tab{display:flex;align-items:center;gap:6px;height:var(--nav-h);padding:0 14px;font-size:13px;font-weight:600;color:var(--gray-500);text-decoration:none;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;position:relative;}
+    .nav-tab:hover{color:var(--primary);background:var(--primary-light);}
+    .nav-tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:700;}
+    .nav-tab .tab-icon{font-size:14px;}
+    .nav-tab .tab-dot{
+      position:absolute;top:8px;right:6px;
+      width:7px;height:7px;border-radius:50%;background:var(--danger);
+      box-shadow:0 0 0 2px #fff;
+    }
+
+    /* MAIN */
+    main{margin-top:calc(var(--header-h) + var(--nav-h));padding:20px;max-width:1300px;margin-left:auto;margin-right:auto;}
+
+    /* PAGE HEAD */
+    .page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+    .page-title{font-size:18px;font-weight:800;color:var(--gray-900);display:flex;align-items:center;gap:8px;}
+    .page-desc{font-size:12px;color:var(--gray-500);}
+
+    /* 담당자 토글 */
+    .owner-filter{display:flex;gap:0;background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:3px;box-shadow:var(--shadow);flex-shrink:0;}
+    .of-btn{padding:7px 14px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;color:var(--gray-500);border-radius:6px;transition:all .15s;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+    .of-btn:hover{color:var(--gray-700);background:var(--gray-50);}
+    .of-btn.active{background:var(--primary);color:#fff;}
+    .of-avatar{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.25);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+    .of-btn:not(.active) .of-avatar{background:linear-gradient(135deg,var(--primary),#60a5fa);color:#fff;}
+    .of-count{background:rgba(255,255,255,.25);padding:1px 7px;border-radius:20px;font-size:11px;font-weight:800;min-width:22px;text-align:center;}
+    .of-btn:not(.active) .of-count{background:var(--gray-100);color:var(--gray-600);}
+
+    /* STATS */
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
+    .stat-card{background:#fff;border-radius:var(--radius);padding:14px 16px;border:1px solid var(--gray-200);box-shadow:var(--shadow);display:flex;align-items:center;gap:12px;}
+    .stat-icon{width:40px;height:40px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+    .stat-text{flex:1;min-width:0;}
+    .stat-value{font-size:22px;font-weight:800;line-height:1.1;}
+    .stat-label{font-size:11px;color:var(--gray-500);font-weight:600;margin-top:2px;}
+
+    /* SECTION */
+    .section{margin-bottom:22px;}
+    .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
+    .section-title{font-size:14px;font-weight:800;color:var(--gray-700);display:flex;align-items:center;gap:8px;}
+    .section-title .count{font-size:11px;background:var(--primary-light);color:var(--primary);padding:2px 9px;border-radius:20px;font-weight:800;}
+    .btn-mini{
+      font-size:11px;font-weight:700;padding:6px 12px;
+      background:#fff;color:var(--gray-600);
+      border:1px solid var(--gray-300);border-radius:6px;cursor:pointer;
+      display:flex;align-items:center;gap:4px;transition:all .12s;
+    }
+    .btn-mini:hover{background:var(--danger-light);color:var(--danger);border-color:var(--danger);}
+
+    /* RUNNING CARD (큰 카드) */
+    .running-card{
+      background:linear-gradient(135deg,#fef3c7,#fffbeb);
+      border:2px solid #fcd34d;border-radius:14px;
+      padding:18px 20px;box-shadow:0 4px 12px rgba(245,158,11,.15);
+      position:relative;overflow:hidden;
+    }
+    .running-card::before{
+      content:'';position:absolute;top:0;left:0;right:0;height:3px;
+      background:linear-gradient(90deg,#f59e0b,#fcd34d);
+      animation:slide 2s linear infinite;
+    }
+    @keyframes slide{0%{transform:translateX(-100%);}100%{transform:translateX(100%);}}
+
+    .rc-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+    .rc-icon{
+      width:38px;height:38px;border-radius:9px;background:#f59e0b;
+      display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;
+      animation:spin 1.8s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .rc-title{font-size:15px;font-weight:800;color:#78350f;}
+    .rc-pjt{font-family:monospace;background:rgba(255,255,255,.7);padding:2px 8px;border-radius:5px;font-size:11px;color:var(--primary);font-weight:700;}
+    .rc-actions{margin-left:auto;display:flex;gap:6px;}
+    .btn-cancel{
+      padding:6px 14px;font-size:12px;font-weight:700;
+      background:#fff;color:var(--danger);
+      border:1px solid #fecaca;border-radius:6px;cursor:pointer;
+      transition:all .12s;
+    }
+    .btn-cancel:hover{background:var(--danger);color:#fff;border-color:var(--danger);}
+    .btn-cancel:disabled{
+      background:var(--gray-50);color:var(--gray-400);border-color:var(--gray-200);
+      cursor:not-allowed;
+    }
+    .btn-cancel:disabled:hover{background:var(--gray-50);color:var(--gray-400);border-color:var(--gray-200);}
+
+    .lock-tag{
+      font-size:10px;font-weight:700;color:var(--gray-400);
+      background:var(--gray-100);padding:2px 7px;border-radius:4px;
+      display:inline-flex;align-items:center;gap:3px;
+    }
+
+    /* 다중 선택 버튼 */
+    .btn-bulk{
+      font-size:11px;font-weight:700;padding:6px 12px;
+      background:var(--primary);color:#fff;
+      border:none;border-radius:6px;cursor:pointer;
+      display:flex;align-items:center;gap:4px;transition:all .12s;
+    }
+    .btn-bulk:hover{background:var(--primary-dark);}
+    .btn-bulk:disabled{background:var(--gray-200);color:var(--gray-400);cursor:not-allowed;}
+    .bulk-actions{display:flex;gap:6px;align-items:center;}
+    .select-info{
+      font-size:11px;color:var(--gray-500);font-weight:600;
+      padding:0 6px;
+    }
+    .select-info strong{color:var(--primary);}
+
+    .rc-info{font-size:12px;color:#78350f;margin-bottom:10px;}
+    .rc-info-row{display:flex;gap:18px;flex-wrap:wrap;}
+    .rc-info-item{display:flex;align-items:center;gap:5px;}
+    .rc-progress-wrap{
+      height:10px;background:rgba(255,255,255,.7);border-radius:10px;
+      overflow:hidden;position:relative;
+    }
+    .rc-progress-bar{
+      height:100%;background:linear-gradient(90deg,#f59e0b,#fcd34d,#f59e0b);
+      background-size:200% 100%;width:0%;
+      transition:width .3s ease;border-radius:10px;
+      animation:shimmer 2s linear infinite;
+    }
+    @keyframes shimmer{0%{background-position:0% 0;}100%{background-position:-200% 0;}}
+    .rc-progress-text{display:flex;justify-content:space-between;font-size:11px;color:#78350f;font-weight:600;margin-top:6px;}
+    .rc-current-step{font-size:12px;color:#92400e;margin-top:8px;background:rgba(255,255,255,.6);padding:6px 10px;border-radius:6px;}
+    .rc-current-step strong{color:#78350f;}
+
+    /* PENDING LIST */
+    .pending-list{display:flex;flex-direction:column;gap:6px;}
+    .pending-row{
+      background:#fff;border-radius:8px;border:1px solid var(--gray-200);
+      padding:11px 14px;display:flex;align-items:center;gap:12px;
+      transition:all .12s;
+    }
+    .pending-row:hover{border-color:var(--primary);background:var(--primary-light);}
+    .pending-row.locked{background:var(--gray-50);opacity:.78;}
+    .pending-row.locked:hover{border-color:var(--gray-300);background:var(--gray-50);}
+    .pending-row.selected{border-color:var(--primary);background:var(--primary-light);box-shadow:0 0 0 2px rgba(37,99,235,.15);}
+    .pr-chk{
+      width:18px;height:18px;cursor:pointer;flex-shrink:0;accent-color:var(--primary);
+    }
+    .pr-chk:disabled{cursor:not-allowed;opacity:.4;}
+    .pr-num{
+      width:26px;height:26px;border-radius:50%;
+      background:var(--gray-100);color:var(--gray-600);
+      font-size:11px;font-weight:800;
+      display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    }
+    .pr-type{font-size:14px;width:24px;text-align:center;}
+    .pr-main{flex:1;min-width:0;}
+    .pr-title{font-size:13px;font-weight:700;color:var(--gray-800);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .pr-meta{font-size:11px;color:var(--gray-500);margin-top:2px;display:flex;gap:10px;flex-wrap:wrap;}
+    .pr-meta-pjt{font-family:monospace;color:var(--primary);font-weight:700;}
+    .pr-eta{font-size:11px;color:var(--gray-400);font-weight:600;}
+    .pending-empty{
+      background:#fff;border-radius:var(--radius);padding:36px 20px;
+      text-align:center;color:var(--gray-400);border:1px dashed var(--gray-300);
+    }
+
+    /* 담당자별 그룹 카드 */
+    .pgroup{
+      background:#fff;border:1px solid var(--gray-200);border-radius:10px;
+      overflow:hidden;margin-bottom:8px;
+    }
+    .pgroup.mine{border-color:var(--primary);box-shadow:0 0 0 2px rgba(37,99,235,.08);}
+    .pg-head{
+      padding:12px 14px;display:flex;align-items:center;gap:12px;
+      cursor:pointer;background:var(--gray-50);transition:background .12s;
+    }
+    .pg-head:hover{background:var(--gray-100);}
+    .pgroup.mine .pg-head{background:linear-gradient(90deg, var(--primary-light), #fff 70%);}
+    .pg-num{
+      width:30px;height:30px;border-radius:50%;
+      background:var(--gray-200);color:var(--gray-700);
+      font-size:11px;font-weight:800;
+      display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    }
+    .pgroup.mine .pg-num{background:var(--primary);color:#fff;}
+    .pg-avatar{
+      width:30px;height:30px;border-radius:50%;
+      color:#fff;font-size:13px;font-weight:800;
+      display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    }
+    .pg-info{flex:1;min-width:0;}
+    .pg-name{font-size:14px;font-weight:800;color:var(--gray-900);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .me-tag{font-size:9px;background:var(--primary);color:#fff;padding:1px 6px;border-radius:4px;font-weight:800;}
+    .pg-count{font-size:11px;font-weight:600;color:var(--primary);background:var(--primary-light);padding:2px 8px;border-radius:5px;}
+    .pg-meta{font-size:11px;color:var(--gray-500);margin-top:3px;}
+    .pg-toggle{font-size:11px;color:var(--gray-400);min-width:14px;text-align:center;}
+    .pg-body{background:#fff;border-top:1px solid var(--gray-100);}
+    .pending-row.inside{margin:6px 10px;border:1px solid var(--gray-100);}
+    .pending-row.inside:hover{border-color:var(--primary);}
+
+    /* 본인 차례 강조 알림 카드 */
+    .my-turn-card{
+      background:linear-gradient(135deg, var(--primary-light), #fff);
+      border:2px solid var(--primary);
+      border-radius:14px;padding:16px 20px;margin-bottom:16px;
+      display:flex;align-items:center;gap:14px;
+      box-shadow:0 4px 12px rgba(37,99,235,.15);
+    }
+    .my-turn-card.running{background:linear-gradient(135deg, #fef3c7, #fffbeb);border-color:#f59e0b;}
+    .mt-icon{width:48px;height:48px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}
+    .mt-body{flex:1;}
+    .mt-title{font-size:15px;font-weight:800;color:var(--gray-900);}
+    .mt-desc{font-size:12px;color:var(--gray-600);margin-top:4px;}
+
+    /* COMPLETED LIST */
+    .completed-list{display:flex;flex-direction:column;gap:5px;max-height:480px;overflow-y:auto;background:#fff;border-radius:var(--radius);border:1px solid var(--gray-200);padding:6px;}
+    .completed-row{
+      padding:9px 14px;border-radius:7px;display:flex;align-items:center;gap:12px;
+      font-size:12px;border-left:3px solid transparent;
+    }
+    .completed-row:hover{background:var(--gray-50);}
+    .completed-row.success{border-left-color:var(--green);}
+    .completed-row.error  {border-left-color:var(--danger);}
+    .completed-row.cancel {border-left-color:var(--gray-400);}
+    .cr-time{font-size:11px;color:var(--gray-400);font-family:monospace;min-width:50px;}
+    .cr-icon{font-size:14px;width:20px;text-align:center;}
+    .cr-text{flex:1;color:var(--gray-700);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .cr-text strong{color:var(--gray-900);}
+    .cr-duration{font-size:11px;color:var(--gray-400);}
+    .cr-retry{
+      font-size:10px;font-weight:700;padding:3px 9px;
+      background:var(--primary);color:#fff;
+      border:none;border-radius:5px;cursor:pointer;
+    }
+    .cr-retry:hover{background:var(--primary-dark);}
+
+    /* RUNNING EMPTY */
+    .running-empty{
+      background:#fff;border:1px dashed var(--gray-300);border-radius:14px;
+      padding:36px 20px;text-align:center;color:var(--gray-400);
+    }
+    .re-icon{font-size:42px;margin-bottom:10px;}
+    .re-title{font-size:14px;font-weight:700;color:var(--gray-500);margin-bottom:4px;}
+    .re-sub{font-size:12px;}
+
+    /* TOAST */
+    .toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:500;}
+    .toast{background:var(--gray-900);color:#fff;font-size:12px;padding:10px 16px;border-radius:8px;box-shadow:0 8px 16px rgba(0,0,0,.2);animation:sin .2s ease;max-width:340px;}
+    @keyframes sin{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+    .toast.out{animation:so .3s ease forwards;}
+    @keyframes so{to{opacity:0;transform:translateY(6px);}}
+
+    /* CONFIRM MODAL */
+    .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:20px;}
+    .modal-backdrop.active{display:flex;}
+    .modal{background:#fff;border-radius:14px;width:420px;max-width:95vw;padding:24px;box-shadow:0 20px 40px rgba(0,0,0,.25);}
+    .modal-title{font-size:16px;font-weight:800;color:var(--gray-900);margin-bottom:8px;}
+    .modal-msg{font-size:13px;color:var(--gray-600);line-height:1.6;margin-bottom:18px;}
+    .modal-actions{display:flex;justify-content:flex-end;gap:8px;}
+    .btn{padding:9px 18px;font-family:inherit;font-size:13px;font-weight:700;border:none;border-radius:7px;cursor:pointer;}
+    .btn-secondary{background:var(--gray-100);color:var(--gray-700);}
+    .btn-danger{background:var(--danger);color:#fff;}
+
+    @media (max-width:700px){
+      .stats-row{grid-template-columns:1fr 1fr;}
+      .rc-actions{margin-left:0;width:100%;}
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-icon">⚡</div>
+  <div class="logo-text">영업현황 자동화</div>
+  <div class="header-right">
+    <!-- 알림 종 -->
+    <div class="notif-wrap">
+      <button class="notif-btn" id="notifBtn" onclick="toggleNotifDropdown(event)">
+        🔔
+        <span class="notif-badge" id="notifBadge" style="display:none;">0</span>
+      </button>
+      <div class="notif-dropdown" id="notifDropdown">
+        <div class="notif-head">
+          <span class="notif-title">🔔 알림</span>
+          <button class="notif-mark" onclick="markAllRead()">모두 읽음</button>
+        </div>
+        <div class="notif-list" id="notifList"></div>
+        <div class="notif-foot"><a href="queue.html">전체 작업 큐 보기 →</a></div>
+      </div>
+    </div>
+    <div class="user-chip" onclick="toggleRole()" title="클릭하여 권한 전환 (데모용)">
+      <div class="user-dot" id="userDot">김</div>
+      <span id="userName">김담당</span>
+      <span class="role-badge" id="userRole">담당자</span>
+    </div>
+  </div>
+</header>
+
+<!-- SUB NAV -->
+<nav class="sub-nav">
+  <a class="nav-tab" href="index.html"><span class="tab-icon">🏠</span> 대시보드</a>
+  <a class="nav-tab" href="bpms.html"><span class="tab-icon">🔍</span> BPMS 데이터 조회 · 매핑</a>
+  <a class="nav-tab" href="files.html"><span class="tab-icon">📁</span> 파일 · PDF 관리</a>
+  <a class="nav-tab active" href="queue.html"><span class="tab-icon">📋</span> 작업 큐</a>
+  <a class="nav-tab" href="nuriji.html"><span class="tab-icon">🌐</span> 누리집 등록</a>
+</nav>
+
+<main>
+
+  <div class="page-head">
+    <div>
+      <div class="page-title">📋 작업 큐 · 진행 현황</div>
+      <div class="page-desc">팀 PC에서 처리 중인 자동화 작업을 실시간으로 확인하고 관리합니다.</div>
+    </div>
+    <div class="owner-filter">
+      <button class="of-btn active" id="ofMine" onclick="filterOwner(true)">
+        <span class="of-avatar">김</span><span>내 작업만</span><span class="of-count" id="ofMineCount">0</span>
+      </button>
+      <button class="of-btn" id="ofAll" onclick="filterOwner(false)">
+        <span style="font-size:14px;">👥</span><span>전체 담당자</span><span class="of-count" id="ofAllCount">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 통계 -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#fef3c7;">⚙</div>
+      <div class="stat-text"><div class="stat-value" style="color:#d97706;" id="sRunning">0</div><div class="stat-label">진행 중</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:var(--blue-bg);">⏳</div>
+      <div class="stat-text"><div class="stat-value" style="color:var(--primary);" id="sPending">0</div><div class="stat-label">대기 중</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:var(--green-bg);">✅</div>
+      <div class="stat-text"><div class="stat-value" style="color:var(--green);" id="sCompleted">0</div><div class="stat-label">오늘 완료</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:var(--danger-light);">❌</div>
+      <div class="stat-text"><div class="stat-value" style="color:var(--danger);" id="sFailed">0</div><div class="stat-label">실패</div></div>
+    </div>
+  </div>
+
+  <!-- 본인 큐 현황 (위치 안내) -->
+  <div id="myTurnContainer"></div>
+
+  <!-- 진행 중 -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title">⚙ 진행 중 <span class="count" id="cntRunning">0</span> <span style="font-size:10px;color:var(--gray-400);margin-left:6px;">(팀 PC 1대 = 한 번에 1개)</span></div>
+    </div>
+    <div id="runningContainer"></div>
+  </div>
+
+  <!-- 다음 예정 -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title">⏳ 다음 예정 <span class="count" id="cntPending">0</span></div>
+      <div class="bulk-actions">
+        <span class="select-info" id="selectInfo" style="display:none;"><strong id="selectedCount">0</strong>건 선택됨</span>
+        <button class="btn-bulk" id="btnSelectAll" onclick="toggleSelectAll()">☑ 전체 선택 (가능)</button>
+        <button class="btn-mini" id="btnCancelSelected" onclick="cancelSelected()" disabled style="background:var(--danger);color:#fff;border-color:var(--danger);">❌ 선택 취소</button>
+      </div>
+    </div>
+    <div id="pendingContainer"></div>
+  </div>
+
+  <!-- 완료 이력 -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title">📊 오늘 처리 이력 <span class="count" id="cntHistory">0</span></div>
+    </div>
+    <div id="historyContainer"></div>
+  </div>
+
+</main>
+
+<!-- 확인 모달 -->
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal">
+    <div class="modal-title" id="confirmTitle">작업을 취소하시겠습니까?</div>
+    <div class="modal-msg" id="confirmMsg">이 작업은 큐에서 제거되며, 되돌릴 수 없습니다.</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeConfirm()">아니오</button>
+      <button class="btn btn-danger" id="confirmOk">예, 취소합니다</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   공유 상태 (localStorage 시뮬레이션 — 실제론 서버 API)
+═══════════════════════════════════════════════════════ */
+const CURRENT_USER = '김담당';
+const JOBS_KEY  = 'queue_jobs';
+const NOTIF_KEY = 'queue_notifs';
+const ROLE_KEY  = 'user_role';  // 'manager' 또는 'admin'
+
+function getRole() { return localStorage.getItem(ROLE_KEY) || 'manager'; }
+function setRole(r){ localStorage.setItem(ROLE_KEY, r); renderRoleBadge(); renderAll(); }
+function isAdmin() { return getRole() === 'admin'; }
+
+function canCancelJob(job) {
+  // 관리자는 모두 가능, 담당자는 본인 것만 가능
+  return isAdmin() || job.manager === CURRENT_USER;
+}
+
+function toggleRole() {
+  const next = isAdmin() ? 'manager' : 'admin';
+  setRole(next);
+  showToast(next === 'admin'
+    ? '🛡 관리자 권한으로 전환되었습니다. 모든 담당자의 작업을 취소할 수 있습니다.'
+    : '👤 담당자 권한으로 전환되었습니다. 본인 작업만 취소할 수 있습니다.', 3000);
+}
+
+function renderRoleBadge() {
+  const badge = document.getElementById('userRole');
+  if (isAdmin()) {
+    badge.textContent = '🛡 관리자';
+    badge.classList.add('admin');
+  } else {
+    badge.textContent = '담당자';
+    badge.classList.remove('admin');
+  }
+}
+
+function getJobs()  { try { return JSON.parse(localStorage.getItem(JOBS_KEY))  || []; } catch { return []; } }
+function setJobs(a) { localStorage.setItem(JOBS_KEY, JSON.stringify(a)); }
+function getNotifs(){ try { return JSON.parse(localStorage.getItem(NOTIF_KEY))|| []; } catch { return []; } }
+function setNotifs(a){ localStorage.setItem(NOTIF_KEY, JSON.stringify(a)); }
+
+function addNotif(notif) {
+  const list = getNotifs();
+  list.unshift({
+    id: 'n_' + Date.now() + Math.random().toString(36).slice(2,5),
+    timestamp: Date.now(), read: false, ...notif,
+  });
+  if (list.length > 50) list.splice(50);
+  setNotifs(list);
+}
+
+function uuid() { return 'j_' + Date.now() + Math.random().toString(36).slice(2,6); }
+
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+}
+function fmtTimeShort(ts) {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function fmtTimeAgo(ts) {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return '방금 전';
+  if (diff < 3600) return `${Math.floor(diff/60)}분 전`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}시간 전`;
+  return `${Math.floor(diff/86400)}일 전`;
+}
+function fmtDuration(sec) {
+  if (sec < 60) return `${sec}초`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}분 ${s}초`;
+}
+
+const TYPE_INFO = {
+  nuriji_register: { icon:'🌐', label:'누리집 등록',     duration:140 },
+  bpms_download:   { icon:'📥', label:'BPMS 첨부파일',   duration:60  },
+  bpms_load:       { icon:'📡', label:'BPMS 보고서 갱신', duration:30  },
+  pdf_parse:       { icon:'⭐', label:'PDF 파싱',         duration:20  },
+};
+
+/* ═══════════════════════════════════════════════════════
+   샘플 데이터 초기화 (첫 진입시 시드)
+   ⭐ 새 워크플로우: 팀 PC에서 한 번에 1명만 자동화 가능
+   → 1건만 running, 나머지는 모두 pending (담당자별로 그룹지어 순차)
+═══════════════════════════════════════════════════════ */
+function seedSampleJobs() {
+  const existing = getJobs();
+  const VERSION = 'v2-sequential';  // 시드 버전 - 변경 시 재시드
+  if (existing.length && localStorage.getItem('seed_version') === VERSION) return;
+  localStorage.setItem('seed_version', VERSION);
+
+  const now = Date.now();
+  let t = now - 600000;  // 모두 같은 시각 근방에 예약된 것으로 시뮬
+
+  const seed = [
+    // 🟢 진행 중 (1개만!)
+    { id:uuid(), type:'nuriji_register', manager:'김담당', pjt:'PJT-2026-0005', name:'인천공항 장기주차장',
+      status:'running', scheduledAt:t++, startedAt:now-65000,
+      currentStep:'첨부파일 업로드 (5/7)' },
+
+    // ⏳ 대기 큐 — 순서대로 1건씩 처리됨
+    // 김담당의 나머지 작업 (먼저 처리)
+    { id:uuid(), type:'nuriji_register', manager:'김담당', pjt:'PJT-2026-0001', name:'강남 주차빌딩 충전소',  status:'pending', scheduledAt:t++ },
+    { id:uuid(), type:'nuriji_register', manager:'김담당', pjt:'PJT-2026-0006', name:'수원 공영주차장',         status:'pending', scheduledAt:t++ },
+    { id:uuid(), type:'bpms_download',   manager:'김담당', pjt:'PJT-2026-0009', name:'마포 신축오피스',         status:'pending', scheduledAt:t++ },
+
+    // 다음: 이민준 (5건)
+    { id:uuid(), type:'nuriji_register', manager:'이민준', pjt:'PJT-2026-0011', name:'판교 IT센터',          status:'pending', scheduledAt:t++ },
+    { id:uuid(), type:'nuriji_register', manager:'이민준', pjt:'PJT-2026-0017', name:'분당 메디컬센터',       status:'pending', scheduledAt:t++ },
+    { id:uuid(), type:'nuriji_register', manager:'이민준', pjt:'PJT-2026-0021', name:'성남 코엑스몰',         status:'pending', scheduledAt:t++ },
+
+    // 다음: 박서연 (3건)
+    { id:uuid(), type:'nuriji_register', manager:'박서연', pjt:'PJT-2026-0014', name:'잠실 롯데몰',            status:'pending', scheduledAt:t++ },
+    { id:uuid(), type:'nuriji_register', manager:'박서연', pjt:'PJT-2026-0018', name:'송파 풍납동 아파트',     status:'pending', scheduledAt:t++ },
+
+    // 다음: 최준혁 (2건)
+    { id:uuid(), type:'nuriji_register', manager:'최준혁', pjt:'PJT-2026-0019', name:'서초 삼성타워',          status:'pending', scheduledAt:t++ },
+
+    // 다음: 정하은 (4건)
+    { id:uuid(), type:'nuriji_register', manager:'정하은', pjt:'PJT-2026-0022', name:'광화문 정부청사',       status:'pending', scheduledAt:t++ },
+    { id:uuid(), type:'nuriji_register', manager:'정하은', pjt:'PJT-2026-0024', name:'을지로 신축오피스',     status:'pending', scheduledAt:t++ },
+
+    // 오늘 완료
+    { id:uuid(), type:'nuriji_register', manager:'김담당', pjt:'PJT-2026-0002', name:'판교 오피스 충전소',
+      status:'completed', scheduledAt:now-1200000, startedAt:now-1140000, completedAt:now-1000000,
+      result:{success:true, message:'등록 성공'} },
+    { id:uuid(), type:'bpms_download',   manager:'김담당', pjt:'PJT-2026-0003', name:'송파 아파트 단지',
+      status:'completed', scheduledAt:now-2400000, startedAt:now-2340000, completedAt:now-2280000,
+      result:{success:true, message:'24개 파일 다운로드 완료'} },
+    { id:uuid(), type:'nuriji_register', manager:'이민준', pjt:'PJT-2026-0010', name:'대치동 사옥',
+      status:'failed', scheduledAt:now-900000, startedAt:now-840000, completedAt:now-780000,
+      result:{success:false, message:'사업자 인증서 만료 - 갱신 필요'} },
+    { id:uuid(), type:'nuriji_register', manager:'박서연', pjt:'PJT-2026-0013', name:'서초 IT밸리',
+      status:'completed', scheduledAt:now-3600000, startedAt:now-3540000, completedAt:now-3420000,
+      result:{success:true, message:'등록 성공'} },
+  ];
+  setJobs(seed);
+
+  // 시드 알림
+  setNotifs([
+    { id:'n_seed1', type:'success', title:'PJT-2026-0002 누리집 등록 완료', msg:'소요 1분 40초', timestamp:now-1000000, read:false, manager:'김담당' },
+    { id:'n_seed2', type:'error',   title:'PJT-2026-0010 등록 실패',          msg:'사업자 인증서 만료', timestamp:now-780000,  read:false, manager:'이민준' },
+    { id:'n_seed3', type:'info',    title:'BPMS 첨부파일 다운로드 완료',      msg:'24개 파일',         timestamp:now-2280000, read:true,  manager:'김담당' },
+  ]);
+}
+seedSampleJobs();
+
+/* ═══════════════════════════════════════════════════════
+   큐 프로세서 — ⭐ 한 번에 1개 작업만 실행 (사이트 정책 반영)
+   - 한 사람 작업 끝 → 같은 사람 다음 작업 또는 다음 사람으로 이동
+   - 담당자 전환 시점에 다음 담당자에게 "차례" 알림 발송
+═══════════════════════════════════════════════════════ */
+function processQueue() {
+  let jobs = getJobs();
+  const now = Date.now();
+  let changed = false;
+
+  // 1) 현재 진행 중 작업 갱신
+  const running = jobs.find(j => j.status === 'running');
+  if (running) {
+    const dur = TYPE_INFO[running.type].duration * 1000;
+    const elapsed = now - running.startedAt;
+    if (elapsed >= dur) {
+      // 완료 처리
+      running.status = 'completed';
+      running.completedAt = now;
+      running.result = { success: true, message: getCompleteMsg(running.type) };
+      addNotif({
+        type:'success', manager:running.manager,
+        title:`${running.pjt} ${TYPE_INFO[running.type].label} 완료`,
+        msg:`소요 ${fmtDuration(Math.floor((running.completedAt - running.startedAt)/1000))}`,
+      });
+      changed = true;
+    } else {
+      const pct = Math.round(elapsed / dur * 100);
+      const newStep = getCurrentStep(running.type, pct);
+      if (newStep !== running.currentStep) {
+        running.currentStep = newStep;
+        changed = true;
+      }
+    }
+  }
+
+  // 2) 진행 중인 작업이 없으면 → 큐에서 다음 1개만 시작
+  const stillRunning = jobs.some(j => j.status === 'running');
+  if (!stillRunning) {
+    const next = jobs.filter(j => j.status === 'pending')
+      .sort((a,b) => (a.priority||999) - (b.priority||999) || a.scheduledAt - b.scheduledAt)[0];
+
+    if (next) {
+      // 마지막으로 완료된 작업의 담당자가 누구였는지 확인
+      const lastDone = jobs.filter(j => j.completedAt && (j.status === 'completed' || j.status === 'failed'))
+        .sort((a,b) => (b.completedAt||0) - (a.completedAt||0))[0];
+      const isHandoff = !lastDone || lastDone.manager !== next.manager;
+
+      next.status = 'running';
+      next.startedAt = now;
+      next.currentStep = getCurrentStep(next.type, 0);
+
+      if (isHandoff) {
+        // ⭐ 담당자 전환 시점 — 다음 담당자에게 강조 알림
+        const myPendingCount = jobs.filter(j => j.manager === next.manager && (j.status === 'pending' || j.id === next.id)).length;
+        addNotif({
+          type:'info', manager:next.manager,
+          title:`🔔 ${next.manager}님, 이제 당신 차례입니다!`,
+          msg:`${myPendingCount}건 자동 처리 시작 (현재: ${TYPE_INFO[next.type].label})`,
+        });
+      } else {
+        // 같은 담당자의 다음 작업
+        addNotif({
+          type:'info', manager:next.manager,
+          title:`${next.pjt} ${TYPE_INFO[next.type].label} 시작`,
+          msg:`예상 ${TYPE_INFO[next.type].duration}초`,
+        });
+      }
+      changed = true;
+    }
+  }
+
+  if (changed) setJobs(jobs);
+}
+
+/* ═══════════════════════════════════════════════════════
+   예상 시작 시각 계산 — 큐의 모든 대기 작업에 ETA 부여
+═══════════════════════════════════════════════════════ */
+function buildPendingWithETA() {
+  const jobs = getJobs();
+  const now = Date.now();
+  let eta = now;
+
+  // 현재 진행 중 작업의 남은 시간 더하기
+  const running = jobs.find(j => j.status === 'running');
+  if (running) {
+    const dur = TYPE_INFO[running.type].duration * 1000;
+    const elapsed = now - running.startedAt;
+    eta += Math.max(0, dur - elapsed);
+  }
+
+  const pending = jobs.filter(j => j.status === 'pending')
+    .sort((a,b) => (a.priority||999) - (b.priority||999) || a.scheduledAt - b.scheduledAt);
+
+  return pending.map(j => {
+    const startAt = eta;
+    eta += TYPE_INFO[j.type].duration * 1000;
+    return { ...j, estimatedStart: startAt };
+  });
+}
+
+/* 담당자별로 연속된 작업을 그룹화 (큐 순서 유지) */
+function groupPendingByManager(pendingWithETA) {
+  const groups = [];
+  let cur = null;
+  for (const j of pendingWithETA) {
+    if (!cur || cur.manager !== j.manager) {
+      if (cur) groups.push(cur);
+      cur = { manager: j.manager, jobs: [], startAt: j.estimatedStart, endAt: 0 };
+    }
+    cur.jobs.push(j);
+    cur.endAt = j.estimatedStart + TYPE_INFO[j.type].duration * 1000;
+  }
+  if (cur) groups.push(cur);
+  return groups;
+}
+
+function getCurrentStep(type, pct) {
+  if (type === 'nuriji_register') {
+    if (pct < 15) return '🔐 누리집 로그인 확인';
+    if (pct < 30) return '📝 기본 정보 입력 중';
+    if (pct < 65) return '📎 첨부파일 업로드 중';
+    if (pct < 85) return '✅ 검증·확인 페이지';
+    return '🚀 최종 제출 중';
+  }
+  if (type === 'bpms_download') {
+    if (pct < 30) return '📂 BPMS 첨부파일 목록 조회';
+    if (pct < 80) return '📥 NAS로 파일 다운로드 중';
+    return '🔍 PDF·OCR 파싱 중';
+  }
+  return '⚙ 처리 중';
+}
+function getCompleteMsg(type) {
+  if (type === 'nuriji_register') return '누리집 등록 완료';
+  if (type === 'bpms_download')   return '첨부파일 다운로드 + 파싱 완료';
+  if (type === 'bpms_load')       return 'BPMS 보고서 갱신 완료';
+  return '처리 완료';
+}
+
+// 1초마다 큐 처리
+setInterval(() => { processQueue(); renderAll(); renderBell(); }, 1000);
+
+/* ═══════════════════════════════════════════════════════
+   필터 (담당자별)
+═══════════════════════════════════════════════════════ */
+let myOnly = true;
+function filterOwner(mine) {
+  myOnly = mine;
+  document.getElementById('ofMine').classList.toggle('active', mine);
+  document.getElementById('ofAll').classList.toggle('active', !mine);
+  renderAll();
+}
+function getFilteredJobs() {
+  return getJobs().filter(j => !myOnly || j.manager === CURRENT_USER);
+}
+
+/* ═══════════════════════════════════════════════════════
+   렌더링
+═══════════════════════════════════════════════════════ */
+function renderAll() {
+  const all  = getJobs();
+  const mine = all.filter(j => j.manager === CURRENT_USER);
+  document.getElementById('ofMineCount').textContent = mine.length;
+  document.getElementById('ofAllCount').textContent  = all.length;
+
+  const jobs = getFilteredJobs();
+  const running   = jobs.filter(j => j.status === 'running');
+  const pending   = jobs.filter(j => j.status === 'pending')
+    .sort((a,b) => (a.priority||999) - (b.priority||999) || a.scheduledAt - b.scheduledAt);
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const history   = jobs.filter(j => (j.status === 'completed' || j.status === 'failed' || j.status === 'cancelled')
+                                  && (j.completedAt || 0) >= todayStart.getTime())
+    .sort((a,b) => (b.completedAt||0) - (a.completedAt||0));
+
+  // 통계
+  document.getElementById('sRunning').textContent   = running.length;
+  document.getElementById('sPending').textContent   = pending.length;
+  document.getElementById('sCompleted').textContent = history.filter(j => j.status === 'completed').length;
+  document.getElementById('sFailed').textContent    = history.filter(j => j.status === 'failed').length;
+  document.getElementById('cntRunning').textContent = running.length;
+  document.getElementById('cntPending').textContent = pending.length;
+  document.getElementById('cntHistory').textContent = history.length;
+
+  renderRunning(running);
+  renderPending(pending);
+  renderHistory(history);
+  renderMyTurn();
+}
+
+/* 본인의 큐 위치/상태 안내 카드 */
+function renderMyTurn() {
+  const container = document.getElementById('myTurnContainer');
+  const all = getJobs();
+  const myRunning = all.find(j => j.status === 'running' && j.manager === CURRENT_USER);
+  const myPending = all.filter(j => j.status === 'pending' && j.manager === CURRENT_USER);
+
+  if (myRunning) {
+    // 내가 진행 중
+    container.innerHTML = `
+      <div class="my-turn-card running">
+        <div class="mt-icon">🚀</div>
+        <div class="mt-body">
+          <div class="mt-title">${CURRENT_USER}님 작업이 진행 중입니다</div>
+          <div class="mt-desc">${TYPE_INFO[myRunning.type].label} · ${myRunning.pjt} · ${myRunning.name}${myPending.length ? `<br>이후 ${myPending.length}건 추가 대기 중` : ''}</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (myPending.length) {
+    // 내가 대기 중 — 몇 번째인지 + 예상 시작 시각
+    const allPendingETA = buildPendingWithETA();
+    const myFirst = allPendingETA.find(j => j.manager === CURRENT_USER);
+    if (myFirst) {
+      // 내 앞에 몇 그룹 있는지
+      const beforeGroups = groupPendingByManager(allPendingETA.filter(j => j.estimatedStart < myFirst.estimatedStart));
+      const myPosition = beforeGroups.length + (getJobs().some(j => j.status === 'running') ? 1 : 0) + 1;
+      const beforeText = beforeGroups.length === 0
+        ? (getJobs().some(j => j.status === 'running') ? '현재 진행 중 완료 후 시작' : '바로 시작')
+        : `${beforeGroups.map(g => g.manager).join(' → ')} 후 시작`;
+      container.innerHTML = `
+        <div class="my-turn-card">
+          <div class="mt-icon">⏳</div>
+          <div class="mt-body">
+            <div class="mt-title">${CURRENT_USER}님은 <span style="color:var(--primary);">#${myPosition}</span> 대기 중 (${myPending.length}건)</div>
+            <div class="mt-desc">${beforeText} · 예상 시작 <strong>${fmtTimeShort(myFirst.estimatedStart)}</strong></div>
+          </div>
+        </div>`;
+      return;
+    }
+  }
+
+  container.innerHTML = '';  // 대기/진행 없음
+}
+
+function renderRunning(list) {
+  const c = document.getElementById('runningContainer');
+  if (!list.length) {
+    c.innerHTML = `
+      <div class="running-empty">
+        <div class="re-icon">💤</div>
+        <div class="re-title">현재 진행 중인 작업이 없습니다</div>
+        <div class="re-sub">${myOnly ? '내가 요청한' : '전체'} 작업 중 진행 중인 항목이 없어요.</div>
+      </div>`;
+    return;
+  }
+  c.innerHTML = list.map(j => {
+    const info = TYPE_INFO[j.type];
+    const dur = info.duration * 1000;
+    const elapsed = Date.now() - j.startedAt;
+    const pct = Math.min(99, Math.round(elapsed / dur * 100));
+    const remaining = Math.max(0, Math.ceil((dur - elapsed) / 1000));
+    return `
+      <div class="running-card">
+        <div class="rc-head">
+          <div class="rc-icon">${info.icon}</div>
+          <div>
+            <div class="rc-title">${info.label}</div>
+            <div style="font-size:11px;color:#92400e;margin-top:2px;">👤 ${j.manager} · 시작 ${fmtTimeShort(j.startedAt)}</div>
+          </div>
+          <span class="rc-pjt">${j.pjt}</span>
+          <div class="rc-actions">
+            ${canCancelJob(j)
+              ? `<button class="btn-cancel" onclick="confirmCancel('${j.id}','running')">⏹ 중단</button>`
+              : `<span class="lock-tag">🔒 권한 없음 (${j.manager})</span>`}
+          </div>
+        </div>
+        <div class="rc-info">
+          <div class="rc-info-row">
+            <span class="rc-info-item">📋 <strong>${j.name}</strong></span>
+            ${getNextHandoffInfo(j)}
+          </div>
+        </div>
+        <div class="rc-progress-wrap"><div class="rc-progress-bar" style="width:${pct}%;"></div></div>
+        <div class="rc-progress-text">
+          <span>${pct}% 진행</span>
+          <span>예상 ${fmtDuration(remaining)} 남음</span>
+        </div>
+        <div class="rc-current-step">🔧 현재 단계: <strong>${j.currentStep || '준비 중'}</strong></div>
+      </div>`;
+  }).join('');
+}
+
+let selectedIds = new Set();
+let expandedGroups = new Set();  // 펼쳐진 담당자 그룹
+
+function renderPending(list) {
+  const c = document.getElementById('pendingContainer');
+  if (!list.length) {
+    selectedIds.clear();
+    updateBulkUI([]);
+    c.innerHTML = `
+      <div class="pending-empty">
+        <div style="font-size:32px;margin-bottom:8px;">📭</div>
+        <div style="font-size:13px;font-weight:700;color:var(--gray-500);">예약된 작업이 없습니다</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:3px;">BPMS 조회 화면에서 누리집 등록 버튼으로 작업을 추가하세요.</div>
+      </div>`;
+    return;
+  }
+
+  // 유효한 선택만 유지
+  const validIds = new Set(list.map(j => j.id));
+  [...selectedIds].forEach(id => { if (!validIds.has(id)) selectedIds.delete(id); });
+
+  // ETA + 담당자별 그룹화
+  const allPending = buildPendingWithETA();
+  // 필터(내 작업/전체) 적용
+  const pendingFiltered = myOnly ? allPending.filter(j => j.manager === CURRENT_USER) : allPending;
+  const groups = groupPendingByManager(pendingFiltered);
+
+  let html = '<div class="pending-list">';
+  let runningOrderIdx = 1;  // 글로벌 순번
+  // 진행 중 1개가 있다면 #1
+  const hasRunning = getJobs().some(j => j.status === 'running');
+  if (hasRunning) runningOrderIdx = 2;
+
+  groups.forEach((g, gi) => {
+    const groupId = `g-${g.manager}-${gi}`;
+    const isExpanded = expandedGroups.has(groupId);
+    const isMe = g.manager === CURRENT_USER;
+    const totalSec = g.jobs.reduce((sum, j) => sum + TYPE_INFO[j.type].duration, 0);
+    const groupCancellable = g.jobs.some(canCancelJob);
+    const allSelected = g.jobs.filter(canCancelJob).every(j => selectedIds.has(j.id));
+
+    html += `
+      <div class="pgroup ${isMe ? 'mine' : ''}">
+        <div class="pg-head" onclick="toggleGroup('${groupId}')">
+          <div class="pg-num">#${runningOrderIdx}</div>
+          <div class="pg-avatar" style="background:${avatarColor(g.manager)};">${g.manager[0]}</div>
+          <div class="pg-info">
+            <div class="pg-name">
+              ${g.manager}${isMe ? ' <span class="me-tag">나</span>' : ''}
+              <span class="pg-count">${g.jobs.length}건</span>
+            </div>
+            <div class="pg-meta">
+              <span>⏱ 예상 ${fmtTimeShort(g.startAt)}~${fmtTimeShort(g.endAt)} (약 ${Math.ceil(totalSec/60)}분)</span>
+            </div>
+          </div>
+          ${groupCancellable ? `
+            <button class="btn-mini" onclick="event.stopPropagation();selectGroupToggle('${groupId}', ${!allSelected})" title="${allSelected ? '그룹 선택 해제' : '그룹 전체 선택'}">
+              ${allSelected ? '☑ 그룹 해제' : '☐ 그룹 선택'}
+            </button>` : ''}
+          <div class="pg-toggle">${isExpanded ? '▲' : '▼'}</div>
+        </div>
+        <div class="pg-body" style="${isExpanded ? '' : 'display:none;'}">`;
+
+    g.jobs.forEach((j) => {
+      const info = TYPE_INFO[j.type];
+      const canCancel = canCancelJob(j);
+      const isSel = selectedIds.has(j.id);
+      html += `
+        <div class="pending-row inside ${canCancel ? '' : 'locked'} ${isSel ? 'selected' : ''}">
+          <input type="checkbox" class="pr-chk" data-id="${j.id}" ${canCancel ? '' : 'disabled'} ${isSel ? 'checked' : ''} onchange="onSelectRow('${j.id}', this.checked)" />
+          <div class="pr-num">${runningOrderIdx}</div>
+          <div class="pr-type">${info.icon}</div>
+          <div class="pr-main">
+            <div class="pr-title">${info.label} · ${j.name}</div>
+            <div class="pr-meta">
+              <span class="pr-meta-pjt">${j.pjt}</span>
+              <span>⏰ 예상 ${fmtTimeShort(j.estimatedStart)}</span>
+            </div>
+          </div>
+          <div class="pr-eta">${info.duration}초</div>
+          ${canCancel
+            ? `<button class="btn-cancel" onclick="confirmCancel('${j.id}','pending')">❌ 취소</button>`
+            : `<span class="lock-tag">🔒 권한 없음</span>`}
+        </div>`;
+      runningOrderIdx++;
+    });
+
+    html += '</div></div>';  // pg-body / pgroup
+  });
+  html += '</div>';
+  c.innerHTML = html;
+
+  updateBulkUI(pendingFiltered);
+}
+
+function toggleGroup(id) {
+  if (expandedGroups.has(id)) expandedGroups.delete(id);
+  else expandedGroups.add(id);
+  renderAll();
+}
+
+function selectGroupToggle(groupId, select) {
+  // groupId 형식: g-{manager}-{idx}
+  // 모든 pending 중 해당 그룹의 작업 ID들을 선택/해제
+  renderAll();  // 우선 펼치고
+  setTimeout(() => {
+    const allPending = buildPendingWithETA();
+    const groups = groupPendingByManager(myOnly ? allPending.filter(j => j.manager === CURRENT_USER) : allPending);
+    const target = groups.find((g, i) => `g-${g.manager}-${i}` === groupId);
+    if (!target) return;
+    target.jobs.filter(canCancelJob).forEach(j => {
+      if (select) selectedIds.add(j.id);
+      else selectedIds.delete(j.id);
+    });
+    renderAll();
+  }, 0);
+}
+
+/* 진행 중 카드에 다음 담당자 정보 표시 */
+function getNextHandoffInfo(running) {
+  const allPending = buildPendingWithETA();
+  // 같은 담당자의 다음 작업
+  const sameMgr = allPending.filter(j => j.manager === running.manager);
+  const otherMgrFirst = allPending.find(j => j.manager !== running.manager);
+
+  if (sameMgr.length === 0 && !otherMgrFirst) return '';
+
+  if (sameMgr.length === 0 && otherMgrFirst) {
+    // 이 작업 끝나면 다른 담당자 차례
+    return `<span class="rc-info-item" style="margin-left:auto;">→ 다음: <strong>${otherMgrFirst.manager}</strong> ${fmtTimeShort(otherMgrFirst.estimatedStart)}</span>`;
+  }
+
+  if (sameMgr.length > 0) {
+    return `<span class="rc-info-item" style="margin-left:auto;">📌 ${running.manager}의 이어지는 작업: ${sameMgr.length}건</span>`;
+  }
+  return '';
+}
+
+/* 담당자별 색상 */
+function avatarColor(manager) {
+  const map = {
+    '김담당':'#2563eb','이민준':'#16a34a','박서연':'#d97706','최준혁':'#7c3aed','정하은':'#0891b2',
+  };
+  return map[manager] || '#6b7280';
+}
+
+function onSelectRow(id, checked) {
+  if (checked) selectedIds.add(id); else selectedIds.delete(id);
+  // 시각적 갱신만 (전체 재렌더 안함)
+  const row = document.querySelector(`.pr-chk[data-id="${id}"]`)?.closest('.pending-row');
+  if (row) row.classList.toggle('selected', checked);
+  updateBulkUI();
+}
+
+function updateBulkUI(list) {
+  const pendingList = list || getFilteredJobs().filter(j => j.status === 'pending');
+  const cancellable = pendingList.filter(canCancelJob);
+  const selectedCount = selectedIds.size;
+
+  const info = document.getElementById('selectInfo');
+  const btnSelAll = document.getElementById('btnSelectAll');
+  const btnCancel = document.getElementById('btnCancelSelected');
+
+  // 선택 정보
+  if (selectedCount > 0) {
+    info.style.display = '';
+    document.getElementById('selectedCount').textContent = selectedCount;
+  } else {
+    info.style.display = 'none';
+  }
+
+  // 전체 선택 버튼 상태
+  if (cancellable.length === 0) {
+    btnSelAll.style.display = 'none';
+  } else {
+    btnSelAll.style.display = '';
+    const allSelected = cancellable.every(j => selectedIds.has(j.id));
+    btnSelAll.textContent = allSelected ? '☐ 전체 해제' : `☑ 전체 선택 (${cancellable.length}건)`;
+  }
+
+  // 선택 취소 버튼 상태
+  btnCancel.disabled = selectedCount === 0;
+  btnCancel.textContent = selectedCount > 0 ? `❌ 선택 ${selectedCount}건 취소` : '❌ 선택 취소';
+}
+
+function toggleSelectAll() {
+  const list = getFilteredJobs().filter(j => j.status === 'pending' && canCancelJob(j));
+  const allSelected = list.length > 0 && list.every(j => selectedIds.has(j.id));
+  if (allSelected) {
+    list.forEach(j => selectedIds.delete(j.id));
+  } else {
+    list.forEach(j => selectedIds.add(j.id));
+  }
+  renderAll();
+}
+
+function cancelSelected() {
+  if (selectedIds.size === 0) { showToast('취소할 작업을 먼저 선택하세요.'); return; }
+
+  // 권한 재확인
+  const jobs = getJobs();
+  const targets = [...selectedIds].map(id => jobs.find(j => j.id === id)).filter(Boolean);
+  const allowed = targets.filter(canCancelJob);
+  const denied  = targets.length - allowed.length;
+
+  if (allowed.length === 0) {
+    showToast(`❌ 선택한 ${denied}건 모두 본인 권한이 없습니다.`, 3500);
+    return;
+  }
+
+  const msg = denied > 0
+    ? `선택한 ${targets.length}건 중 ${allowed.length}건 취소 (권한 없음 ${denied}건은 제외)\n계속하시겠습니까?`
+    : `선택한 ${allowed.length}건을 모두 취소하시겠습니까?`;
+
+  if (!confirm(msg)) return;
+
+  allowed.forEach(j => {
+    j.status = 'cancelled';
+    j.completedAt = Date.now();
+    j.result = { success: false, message: '담당자가 선택 취소함' };
+  });
+  setJobs(jobs);
+
+  addNotif({
+    type:'warning', manager:CURRENT_USER,
+    title:`${allowed.length}건 일괄 취소`,
+    msg:`${isAdmin() ? '🛡 관리자' : '👤 담당자'} 권한으로 취소함`,
+  });
+
+  showToast(`✅ ${allowed.length}건이 취소되었습니다.${denied > 0 ? ` (${denied}건 권한 없음 제외)` : ''}`, 3500);
+  selectedIds.clear();
+  renderAll();
+}
+
+function renderHistory(list) {
+  const c = document.getElementById('historyContainer');
+  if (!list.length) {
+    c.innerHTML = '<div class="pending-empty" style="border-style:dashed;"><div style="font-size:13px;color:var(--gray-400);">오늘 완료된 작업이 없습니다</div></div>';
+    return;
+  }
+  c.innerHTML = '<div class="completed-list">' + list.map(j => {
+    const info = TYPE_INFO[j.type];
+    let cls, icon, status, retry = '';
+    if (j.status === 'completed')      { cls = 'success'; icon = '✅'; status = '완료'; }
+    else if (j.status === 'failed')    { cls = 'error';   icon = '❌'; status = '실패'; retry = `<button class="cr-retry" onclick="retryJob('${j.id}')">재시도 ▶</button>`; }
+    else                                { cls = 'cancel';  icon = '⊘'; status = '취소'; }
+    const duration = (j.completedAt && j.startedAt) ? fmtDuration(Math.floor((j.completedAt - j.startedAt) / 1000)) : '-';
+    return `
+      <div class="completed-row ${cls}">
+        <span class="cr-time">${fmtTimeShort(j.completedAt || j.scheduledAt)}</span>
+        <span class="cr-icon">${icon}</span>
+        <span class="cr-text">${info.icon} <strong>${j.pjt}</strong> ${info.label} <span style="color:var(--gray-400);">· ${j.manager}</span> ${j.result?.message ? `<span style="color:var(--gray-500);">— ${j.result.message}</span>` : ''}</span>
+        <span class="cr-duration">${duration}</span>
+        ${retry}
+      </div>`;
+  }).join('') + '</div>';
+}
+
+/* ═══════════════════════════════════════════════════════
+   액션
+═══════════════════════════════════════════════════════ */
+let pendingConfirmId = null;
+let pendingConfirmKind = null;
+
+function confirmCancel(id, kind) {
+  pendingConfirmId = id;
+  pendingConfirmKind = kind;
+  const jobs = getJobs();
+  const j = jobs.find(x => x.id === id);
+  if (!j) return;
+
+  // 권한 체크
+  if (!canCancelJob(j)) {
+    showToast(`🔒 ${j.manager}님의 작업은 본인 또는 관리자만 취소할 수 있습니다.`, 3500);
+    return;
+  }
+
+  document.getElementById('confirmTitle').textContent = kind === 'running' ? '진행 중인 작업을 중단하시겠습니까?' : '예약된 작업을 취소하시겠습니까?';
+  document.getElementById('confirmMsg').innerHTML = `<strong>${j.pjt}</strong> · ${TYPE_INFO[j.type].label}<br><span style="color:var(--gray-400);font-size:11px;">${j.name} · 👤 ${j.manager}</span>${isAdmin() && j.manager !== CURRENT_USER ? '<br><span style="color:#d97706;font-size:11px;">⚠ 관리자 권한으로 다른 담당자의 작업을 취소합니다.</span>' : ''}`;
+  document.getElementById('confirmOk').onclick = () => doCancel(id);
+  document.getElementById('confirmModal').classList.add('active');
+}
+function closeConfirm() { document.getElementById('confirmModal').classList.remove('active'); }
+
+function doCancel(id) {
+  const jobs = getJobs();
+  const j = jobs.find(x => x.id === id);
+  if (!j) return;
+  j.status = 'cancelled';
+  j.completedAt = Date.now();
+  j.result = { success: false, message: '담당자가 취소함' };
+  setJobs(jobs);
+  addNotif({ type:'warning', manager:j.manager, title:`${j.pjt} 작업 취소`, msg:'담당자가 취소함' });
+  closeConfirm();
+  showToast(`❌ ${j.pjt} 작업이 취소되었습니다.`);
+  renderAll();
+}
+
+function cancelAllPending() {
+  const list = getFilteredJobs().filter(j => j.status === 'pending');
+  if (!list.length) { showToast('취소할 예약이 없습니다.'); return; }
+  if (!confirm(`예약 ${list.length}건을 모두 취소하시겠습니까?`)) return;
+  const jobs = getJobs();
+  list.forEach(p => {
+    const j = jobs.find(x => x.id === p.id);
+    if (j) { j.status = 'cancelled'; j.completedAt = Date.now(); j.result = { success: false, message: '일괄 취소' }; }
+  });
+  setJobs(jobs);
+  showToast(`❌ ${list.length}건의 예약을 취소했습니다.`);
+  renderAll();
+}
+
+function retryJob(id) {
+  const jobs = getJobs();
+  const j = jobs.find(x => x.id === id);
+  if (!j) return;
+  const newJob = {
+    id: uuid(), type: j.type, manager: j.manager, pjt: j.pjt, name: j.name,
+    status: 'pending', scheduledAt: Date.now(), priority: 1,
+  };
+  jobs.push(newJob);
+  setJobs(jobs);
+  showToast(`🔄 ${j.pjt} 재시도 예약됨`);
+  renderAll();
+}
+
+/* ═══════════════════════════════════════════════════════
+   알림 종 + 드롭다운
+═══════════════════════════════════════════════════════ */
+function renderBell() {
+  const list = getNotifs();
+  const unread = list.filter(n => !n.read).length;
+  const btn   = document.getElementById('notifBtn');
+  const badge = document.getElementById('notifBadge');
+
+  btn.classList.toggle('has-unread', unread > 0);
+  badge.style.display = unread > 0 ? 'flex' : 'none';
+  badge.textContent = unread > 9 ? '9+' : unread;
+
+  const filterMine = myOnly;
+  const visible = list.filter(n => !filterMine || n.manager === CURRENT_USER).slice(0, 8);
+  const listEl = document.getElementById('notifList');
+  if (!visible.length) {
+    listEl.innerHTML = `<div class="notif-empty">📭 알림이 없습니다</div>`;
+    return;
+  }
+  listEl.innerHTML = visible.map(n => {
+    const icon = n.type === 'success' ? '✅' : n.type === 'error' ? '❌' : n.type === 'warning' ? '⚠️' : '⚙';
+    return `
+      <div class="notif-item ${n.read ? '' : 'unread'}" onclick="onNotifClick('${n.id}')">
+        <div class="ni-icon">${icon}</div>
+        <div class="ni-body">
+          <div class="ni-title">${n.title}</div>
+          <div class="ni-msg">${n.msg || ''}</div>
+          <div class="ni-time">👤 ${n.manager} · ${fmtTimeAgo(n.timestamp)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleNotifDropdown(e) {
+  e?.stopPropagation();
+  document.getElementById('notifDropdown').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  const dd = document.getElementById('notifDropdown');
+  if (dd.classList.contains('open') && !e.target.closest('.notif-wrap')) dd.classList.remove('open');
+});
+
+function onNotifClick(id) {
+  const list = getNotifs();
+  const n = list.find(x => x.id === id);
+  if (n) { n.read = true; setNotifs(list); renderBell(); }
+}
+function markAllRead() {
+  const list = getNotifs();
+  list.forEach(n => n.read = true);
+  setNotifs(list);
+  showToast('✓ 모든 알림을 읽음 처리했습니다.');
+  renderBell();
+}
+
+/* ─── 토스트 ─── */
+function showToast(msg, dur = 2500) {
+  const wrap = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, dur);
+}
+
+/* 초기 렌더 */
+renderRoleBadge();
+renderAll();
+renderBell();
+</script>
+</body>
+</html>
