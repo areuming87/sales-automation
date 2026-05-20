@@ -342,22 +342,41 @@
       margin-bottom: 6px; padding: 0 2px;
     }
     .dl-field-grid {
-      display: grid; grid-template-columns: 1fr 1fr;
-      gap: 6px;
+      display: flex; flex-direction: column; gap: 4px;
     }
     .dl-field-item {
       display: flex; align-items: center; gap: 8px;
       padding: 8px 12px;
       background: var(--gray-50); border: 1px solid var(--gray-200);
-      border-radius: 7px; cursor: pointer;
+      border-radius: 7px; cursor: grab;
       transition: all .12s;
+      position: relative;
     }
+    .dl-field-item:active { cursor: grabbing; }
     .dl-field-item:hover { background: var(--primary-light); border-color: var(--primary); }
     .dl-field-item.selected {
       background: var(--primary-light); border-color: var(--primary);
     }
     .dl-field-item input { accent-color: var(--primary); cursor: pointer; }
     .dl-field-item.hidden { display: none; }
+    .dl-field-item.dragging { opacity: .4; }
+    .dl-field-item.drop-before { box-shadow: 0 -3px 0 var(--primary); }
+    .dl-field-item.drop-after  { box-shadow: 0 3px 0 var(--primary); }
+
+    .dl-drag-handle {
+      color: var(--gray-400); font-size: 14px;
+      user-select: none; cursor: grab;
+      padding: 0 2px;
+    }
+    .dl-field-num {
+      min-width: 24px; height: 22px; border-radius: 11px;
+      background: var(--gray-200); color: var(--gray-600);
+      font-size: 10px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .dl-field-item.selected .dl-field-num {
+      background: var(--primary); color: #fff;
+    }
     .dl-field-label {
       font-size: 12px; color: var(--gray-700); font-weight: 600;
       flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1115,7 +1134,7 @@
       <div class="dl-mode-tab" id="dlModeSelect" onclick="setDlMode('select')">
         <div class="dl-mode-icon">✓</div>
         <div class="dl-mode-title">선택 다운로드</div>
-        <div class="dl-mode-desc">원하는 컬럼만 선택 (담당자별 저장)</div>
+        <div class="dl-mode-desc">컬럼 선택 + 순서 변경 (담당자별 저장)</div>
       </div>
     </div>
 
@@ -2449,7 +2468,7 @@ function applyXlsMatching() {
 ───────────────────────────────────────────── */
 
 const DL_PREFS_KEY = () => `download_prefs_${CURRENT_USER}`;
-let dlState = { mode: 'all', selectedFields: new Set(), allFields: [] };
+let dlState = { mode: 'all', selectedFields: new Set(), allFields: [], fieldOrder: [] };
 
 const DL_STANDARD_FIELDS = [
   { key: 'reg_status', label: '누리집등록가능' },
@@ -2477,16 +2496,21 @@ const DL_STANDARD_FIELDS = [
 function loadDlPrefs() {
   try {
     const prefs = JSON.parse(localStorage.getItem(DL_PREFS_KEY()));
-    if (prefs && Array.isArray(prefs.selectedFields)) {
-      return { mode: prefs.mode || 'all', selectedFields: prefs.selectedFields };
+    if (prefs) {
+      return {
+        mode: prefs.mode || 'all',
+        selectedFields: Array.isArray(prefs.selectedFields) ? prefs.selectedFields : DL_STANDARD_FIELDS.map(f => f.key),
+        fieldOrder: Array.isArray(prefs.fieldOrder) ? prefs.fieldOrder : [],
+      };
     }
   } catch {}
-  return { mode: 'all', selectedFields: DL_STANDARD_FIELDS.map(f => f.key) };
+  return { mode: 'all', selectedFields: DL_STANDARD_FIELDS.map(f => f.key), fieldOrder: [] };
 }
 function saveDlPrefs() {
   localStorage.setItem(DL_PREFS_KEY(), JSON.stringify({
     mode: dlState.mode,
     selectedFields: [...dlState.selectedFields],
+    fieldOrder: dlState.fieldOrder,
   }));
 }
 
@@ -2519,6 +2543,20 @@ function openDlModal() {
     DL_STANDARD_FIELDS.forEach(f => dlState.selectedFields.add(f.key));
   }
 
+  // 3. 컬럼 순서 빌드 (저장된 순서 우선 + 새로 추가된 컬럼은 뒤에)
+  const remaining = new Set(allFields.map(f => f.key));
+  dlState.fieldOrder = [];
+  prefs.fieldOrder.forEach(k => {
+    if (remaining.has(k)) {
+      dlState.fieldOrder.push(k);
+      remaining.delete(k);
+    }
+  });
+  // 나머지 (새로 등장한 컬럼) 추가
+  allFields.forEach(f => {
+    if (remaining.has(f.key)) dlState.fieldOrder.push(f.key);
+  });
+
   // 3. UI 렌더링
   document.getElementById('dlRowCount').textContent = filteredData.length;
   document.getElementById('dlTotalCount').textContent = allFields.length;
@@ -2542,40 +2580,98 @@ function setDlMode(mode, skipSave) {
 
 function renderDlFields() {
   const list = document.getElementById('dlFieldList');
-  const stdFields = dlState.allFields.filter(f => f.type === 'std');
-  const extFields = dlState.allFields.filter(f => f.type === 'ext');
+  // 사용자 정한 순서대로 정렬된 필드 목록
+  const orderedFields = dlState.fieldOrder
+    .map(k => dlState.allFields.find(f => f.key === k))
+    .filter(Boolean);
 
-  let html = `
+  list.innerHTML = `
     <div class="dl-field-group">
-      <div class="dl-field-group-title">📋 표준 필드 (${stdFields.length}개)</div>
-      <div class="dl-field-grid">
-        ${stdFields.map(f => renderDlFieldItem(f)).join('')}
+      <div class="dl-field-group-title">📋 컬럼 목록 (${orderedFields.length}개) — 드래그해서 순서 변경</div>
+      <div class="dl-field-grid" id="dlFieldGrid">
+        ${orderedFields.map((f, idx) => renderDlFieldItem(f, idx)).join('')}
       </div>
     </div>`;
-
-  if (extFields.length > 0) {
-    html += `
-      <div class="dl-field-group">
-        <div class="dl-field-group-title">⭐ 추가 컬럼 — 엑셀 업로드 시 보존됨 (${extFields.length}개)</div>
-        <div class="dl-field-grid">
-          ${extFields.map(f => renderDlFieldItem(f)).join('')}
-        </div>
-      </div>`;
-  }
-
-  list.innerHTML = html;
   updateDlSelectedCount();
 }
 
-function renderDlFieldItem(f) {
+function renderDlFieldItem(f, idx) {
   const checked = dlState.selectedFields.has(f.key);
   const safeKey = String(f.key).replace(/"/g, '&quot;');
   return `
-    <label class="dl-field-item ${checked ? 'selected' : ''}" data-key="${safeKey}" data-label="${(f.label || '').toLowerCase()}">
-      <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleDlField('${safeKey}', this.checked)" />
+    <div class="dl-field-item ${checked ? 'selected' : ''}"
+         draggable="true"
+         data-key="${safeKey}"
+         data-label="${(f.label || '').toLowerCase()}"
+         ondragstart="onDlDragStart(event)"
+         ondragenter="onDlDragEnter(event)"
+         ondragover="onDlDragOver(event)"
+         ondrop="onDlDrop(event)"
+         ondragend="onDlDragEnd(event)"
+         ondragleave="onDlDragLeave(event)">
+      <span class="dl-drag-handle" title="드래그해서 순서 변경">☰</span>
+      <span class="dl-field-num">${idx + 1}</span>
+      <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleDlField('${safeKey}', this.checked)" />
       <span class="dl-field-label">${f.label}</span>
       <span class="dl-field-tag ${f.type}">${f.type === 'std' ? 'STD' : 'EXT'}</span>
-    </label>`;
+    </div>`;
+}
+
+/* ─── 드래그·드롭으로 컬럼 순서 변경 ─── */
+let dlDragKey = null;
+
+function onDlDragStart(e) {
+  // 체크박스 클릭 시 드래그 시작 안되게
+  if (e.target.tagName === 'INPUT') { e.preventDefault(); return; }
+  dlDragKey = e.currentTarget.dataset.key;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', dlDragKey); } catch {}
+}
+function onDlDragEnter(e) {
+  if (!dlDragKey || e.currentTarget.dataset.key === dlDragKey) return;
+  e.preventDefault();
+}
+function onDlDragOver(e) {
+  if (!dlDragKey) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const item = e.currentTarget;
+  if (item.dataset.key === dlDragKey) return;
+  const rect = item.getBoundingClientRect();
+  const isUpper = (e.clientY - rect.top) < rect.height / 2;
+  document.querySelectorAll('.dl-field-item').forEach(it => it.classList.remove('drop-before', 'drop-after'));
+  item.classList.add(isUpper ? 'drop-before' : 'drop-after');
+}
+function onDlDragLeave(e) {
+  e.currentTarget.classList.remove('drop-before', 'drop-after');
+}
+function onDlDrop(e) {
+  e.preventDefault();
+  if (!dlDragKey) return;
+  const dropKey = e.currentTarget.dataset.key;
+  if (dropKey === dlDragKey) return;
+
+  const rect = e.currentTarget.getBoundingClientRect();
+  const isUpper = (e.clientY - rect.top) < rect.height / 2;
+
+  const fromIdx = dlState.fieldOrder.indexOf(dlDragKey);
+  let toIdx = dlState.fieldOrder.indexOf(dropKey);
+  if (fromIdx < 0 || toIdx < 0) return;
+
+  // 제거 후 인덱스 보정
+  dlState.fieldOrder.splice(fromIdx, 1);
+  if (fromIdx < toIdx) toIdx -= 1;
+  if (!isUpper) toIdx += 1;
+  dlState.fieldOrder.splice(toIdx, 0, dlDragKey);
+
+  saveDlPrefs();
+  renderDlFields();
+}
+function onDlDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.dl-field-item').forEach(it => it.classList.remove('drop-before', 'drop-after'));
+  dlDragKey = null;
 }
 
 function toggleDlField(key, checked) {
@@ -2615,17 +2711,20 @@ function updateDlSelectedCount() {
 }
 
 function executeDlDownload() {
-  // 어떤 필드를 내보낼지 결정
+  // 사용자 정한 순서대로 필드 정렬 (전체/선택 모드 모두 적용)
+  const orderedFields = dlState.fieldOrder
+    .map(k => dlState.allFields.find(f => f.key === k))
+    .filter(Boolean);
+
   let fieldsToExport;
   if (dlState.mode === 'all') {
-    fieldsToExport = dlState.allFields;
+    fieldsToExport = orderedFields;
   } else {
     if (dlState.selectedFields.size === 0) {
       showToast('⚠ 다운로드할 컬럼을 1개 이상 선택하세요.');
       return;
     }
-    // 선택 순서: dlState.allFields 순서 유지하면서 selectedFields에 포함된 것만
-    fieldsToExport = dlState.allFields.filter(f => dlState.selectedFields.has(f.key));
+    fieldsToExport = orderedFields.filter(f => dlState.selectedFields.has(f.key));
   }
 
   closeDlModal();
