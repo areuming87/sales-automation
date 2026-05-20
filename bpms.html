@@ -1185,6 +1185,7 @@
         <select id="xlsFileType" onchange="onFileTypeChange()" style="background:#dbeafe;border-color:var(--primary);color:var(--blue-text);">
           <option value="sales">📋 영업정보 (마스터 — PJT 추가 가능)</option>
           <option value="charger">🔌 충전기정보 (보조 — 기존 PJT만 업데이트)</option>
+          <option value="finance">💰 정산정보 (피벗 — 유형+지급구분 결합)</option>
         </select>
       </div>
       <div class="xls-col-pick">
@@ -2016,16 +2017,25 @@ const XLS_COL_MAP = {
 
 let xlsState = { aoa: [], headerRowIdx: 0, rows: [], headers: [], pjtKey: null, fileName: '', current: 'match', analysis: null, fileType: 'sales' };
 
-/* 파일명으로 종류 자동 감지 — 영업정보(sales) vs 충전기정보(charger) */
+/* 파일명으로 종류 자동 감지 — 영업정보/충전기정보/정산정보 */
 function detectFileType(filename) {
   const lower = (filename || '').toLowerCase();
-  // 영업정보 우선 체크 (충전기보다 먼저)
+  // 정산/회계/결의/비용 키워드 → finance (가장 먼저 체크)
+  if (lower.includes('정산') || lower.includes('회계') ||
+      lower.includes('결의') || lower.includes('비용') ||
+      lower.includes('finance') || lower.includes('payment')) return 'finance';
   if (lower.includes('영업정보') || lower.includes('영업 정보') ||
       lower.includes('영업현황') || lower.includes('sales')) return 'sales';
   if (lower.includes('충전기정보') || lower.includes('충전기 정보') ||
       lower.includes('충전기') || lower.includes('charger')) return 'charger';
-  return 'sales';  // 기본값 = 영업정보 (마스터)
+  return 'sales';
 }
+
+/* 정산정보 파일의 값 컬럼 — 유형+지급구분 조합 + 이 컬럼들의 값을 PJT에 저장 */
+const FINANCE_VALUE_COLS = [
+  '총액(예산)','세금계산서 작성일','착공일','준공완료일',
+  '세금계산서 승인번호','지출결의서 증빙번호',
+];
 
 function renderFileTypeInfo() {
   const el = document.getElementById('xlsFileTypeInfo');
@@ -2033,10 +2043,17 @@ function renderFileTypeInfo() {
     el.style.background = '#eff6ff';
     el.style.color = 'var(--blue-text)';
     el.innerHTML = `📋 <strong>영업정보 (마스터)</strong> — 이 파일의 PJT는 DB에 추가/업데이트됩니다. 신규 PJT도 등록 가능합니다.`;
-  } else {
+  } else if (xlsState.fileType === 'charger') {
     el.style.background = '#f3f4f6';
     el.style.color = 'var(--gray-700)';
     el.innerHTML = `🔌 <strong>충전기정보 (보조)</strong> — 기존 PJT의 충전기 정보만 업데이트됩니다.<br>💡 <strong>영업정보 파일에 없는 PJT는 추가되지 않고 "건너뜀"으로 분류됩니다.</strong>`;
+  } else if (xlsState.fileType === 'finance') {
+    el.style.background = '#f3e8ff';
+    el.style.color = '#6b21a8';
+    el.innerHTML = `💰 <strong>정산정보 (피벗 방식)</strong> — <strong>유형 + 지급구분</strong>을 결합해 새 컬럼으로 저장합니다.<br>
+      예: <code style="background:#fff;padding:1px 5px;border-radius:3px;">구축비(턴키)</code> + <code style="background:#fff;padding:1px 5px;border-radius:3px;">선금</code> →
+      <code style="background:#fff;padding:1px 5px;border-radius:3px;">구축비(턴키)선금_총액(예산)</code> 등 6개 값 컬럼 추가됨.<br>
+      💡 <strong>영업정보에 없는 PJT는 추가되지 않고 "건너뜀"으로 분류됩니다.</strong>`;
   }
 }
 
@@ -2245,6 +2262,114 @@ function reAnalyze() {
   runAnalysis();
 }
 
+/* 💰 정산정보 — 유형+지급구분을 결합하여 피벗 방식으로 저장
+   한 PJT에 여러 행 매칭 가능 (각 행 = 하나의 콤보) */
+function runFinanceAnalysis() {
+  const { rows, pjtKey, headers } = xlsState;
+  const matched = [];  // 행 단위, 같은 PJT 여러 번 매칭 가능
+  const errors = [];
+  const skipped = [];
+
+  // 유형·지급구분 컬럼 찾기 (대소문자·공백 무시)
+  const findCol = (keywords) => headers.find(h => keywords.some(k => normalize(h).toLowerCase().includes(k.toLowerCase())));
+  const typeCol = findCol(['유형']);
+  const payCol  = findCol(['지급구분']);
+
+  if (!typeCol || !payCol) {
+    errors.push({
+      rowNo: 0, code: '',
+      reason: `정산정보 파일에는 "유형", "지급구분" 컬럼이 모두 필요합니다.` +
+              ` (현재: 유형=${typeCol || '❌ 없음'}, 지급구분=${payCol || '❌ 없음'})`
+    });
+  }
+
+  // 값 컬럼 매핑 (엑셀 헤더 ↔ FINANCE_VALUE_COLS — 공백·괄호 정규화)
+  const valueColMap = {};
+  FINANCE_VALUE_COLS.forEach(col => {
+    const norm = normalize(col).toLowerCase();
+    const found = headers.find(h => normalize(h).toLowerCase() === norm);
+    if (found) valueColMap[col] = found;
+  });
+
+  if (typeCol && payCol) {
+    rows.forEach((row, idx) => {
+      const code = normalizePjt(row[pjtKey]);
+      if (!code) {
+        errors.push({ rowNo: idx + 2, reason: 'PJT 코드 비어있음', data: row });
+        return;
+      }
+      const type    = String(row[typeCol] ?? '').trim();
+      const payType = String(row[payCol]  ?? '').trim();
+      if (!type || !payType) {
+        errors.push({ rowNo: idx + 2, code, reason: `유형(${type || '비어있음'}) 또는 지급구분(${payType || '비어있음'}) 비어있음` });
+        return;
+      }
+
+      const combo = `${type}${payType}`;  // 예: "구축비(턴키)선금"
+
+      const existing = SAMPLE.find(s => normalizePjt(s.pjt) === code);
+      if (!existing) {
+        skipped.push({ pjt: code, row, reason: `${combo} — 영업정보에 없는 PJT` });
+        return;
+      }
+
+      // 변경사항 계산 (combo_value 필드)
+      const changes = [];
+      Object.entries(valueColMap).forEach(([dbCol, xlsCol]) => {
+        let v = row[xlsCol];
+        if (v instanceof Date) v = v.toISOString().slice(0, 10);
+        const newVal = String(v ?? '').trim();
+        if (!newVal) return;
+        const fieldKey = `${combo}_${dbCol}`;  // 예: "구축비(턴키)선금_총액(예산)"
+        const oldVal = String(existing[fieldKey] ?? '').trim();
+        if (newVal !== oldVal) {
+          changes.push({ header: dbCol, field: fieldKey, old: oldVal, new: newVal });
+        }
+      });
+
+      matched.push({ pjt: code, existing, row, changes, combo, type, payType });
+    });
+  }
+
+  xlsState.analysis = { matched, newRows: [], errors, skipped, financeMeta: { typeCol, payCol, valueColMap } };
+
+  // 카운트 UI
+  document.getElementById('xlsCntMatch').textContent = matched.length;
+  document.getElementById('xlsCntNew').textContent   = 0;
+  document.getElementById('xlsCntErr').textContent   = errors.length;
+  document.getElementById('xlsTabMatchN').textContent = matched.length;
+  document.getElementById('xlsTabNewN').textContent   = 0;
+  document.getElementById('xlsTabErrN').textContent   = errors.length;
+
+  // 건너뜀 탭 (있으면 표시)
+  const skippedBtn = document.getElementById('xlsTabSkippedBtn');
+  if (skipped.length > 0) { skippedBtn.style.display = ''; } else { skippedBtn.style.display = 'none'; }
+  document.getElementById('xlsTabSkippedN').textContent = skipped.length;
+
+  renderXlsTab();
+  updateXlsFooter();
+
+  // 매핑된 정보 표시 — 정산정보 전용
+  const colMapEl = document.getElementById('xlsColMapInfo');
+  const listEl   = document.getElementById('xlsColMapList');
+  const meta = xlsState.analysis.financeMeta;
+  if (meta && (meta.typeCol || meta.payCol || Object.keys(meta.valueColMap || {}).length)) {
+    colMapEl.style.display = '';
+    let html = '';
+    if (meta.typeCol) html += `<span style="background:#fff;padding:2px 8px;border-radius:4px;margin-right:6px;display:inline-block;margin-bottom:3px;border:1px solid #fde68a;"><strong>${meta.typeCol}</strong> → (유형)</span>`;
+    if (meta.payCol)  html += `<span style="background:#fff;padding:2px 8px;border-radius:4px;margin-right:6px;display:inline-block;margin-bottom:3px;border:1px solid #fde68a;"><strong>${meta.payCol}</strong> → (지급구분)</span>`;
+    Object.entries(meta.valueColMap).forEach(([k, v]) => {
+      html += `<span style="background:#fff;padding:2px 8px;border-radius:4px;margin-right:6px;display:inline-block;margin-bottom:3px;border:1px solid #fde68a;"><strong>${v}</strong> → ${k}</span>`;
+    });
+    listEl.innerHTML = html;
+  } else {
+    colMapEl.style.display = 'none';
+  }
+
+  // 정산정보는 수동 매핑 영역 안 씀
+  document.getElementById('xlsUnmappedInfo').style.display = 'none';
+}
+
 /* 사용자가 수동으로 컬럼 매핑 선택 */
 function setManualMap(header, field) {
   if (!field) {
@@ -2261,6 +2386,13 @@ function setManualMap(header, field) {
 
 function runAnalysis() {
   const { rows, pjtKey, fileType } = xlsState;
+
+  // 💰 정산정보 파일은 별도 처리 (피벗 방식)
+  if (fileType === 'finance') {
+    runFinanceAnalysis();
+    return;
+  }
+
   const matched = [];
   const newRows = [];
   const errors = [];
@@ -2419,7 +2551,8 @@ function renderXlsTab() {
       <div class="xls-row match">
         <div class="xls-row-head">
           <span class="xls-row-pjt">${m.pjt}</span>
-          <span class="xls-row-name">${m.existing.name}</span>
+          <span class="xls-row-name">${m.existing.name || ''}</span>
+          ${m.combo ? `<span class="xls-row-tag" style="background:#f3e8ff;color:#6b21a8;">💰 ${m.combo}</span>` : ''}
           <span class="xls-row-tag green">변경 ${m.changes.length}개 필드</span>
         </div>
         ${m.changes.length ? `<div class="xls-changes">
@@ -2487,16 +2620,24 @@ function updateXlsFooter() {
   const a = xlsState.analysis; if (!a) return;
   const includeNew = document.getElementById('xlsOptNew').checked;
   const isCharger = xlsState.fileType === 'charger';
-  // 충전기정보 파일이면 신규 추가 옵션 자동 비활성화
-  document.getElementById('xlsOptNew').disabled = isCharger;
-  document.getElementById('xlsOptNew').parentElement.style.opacity = isCharger ? '0.5' : '1';
+  const isFinance = xlsState.fileType === 'finance';
+  // 충전기·정산 파일은 신규 추가 옵션 자동 비활성화
+  const disableNew = isCharger || isFinance;
+  document.getElementById('xlsOptNew').disabled = disableNew;
+  document.getElementById('xlsOptNew').parentElement.style.opacity = disableNew ? '0.5' : '1';
 
-  const newCount = (includeNew && !isCharger) ? a.newRows.length : 0;
+  const newCount = (includeNew && !disableNew) ? a.newRows.length : 0;
   const total = a.matched.length + newCount;
   const skippedCount = a.skipped?.length || 0;
 
+  // 정산정보는 "변경 필드 수" 합계도 함께 표시
+  let financeFieldCount = 0;
+  if (isFinance) {
+    a.matched.forEach(m => financeFieldCount += (m.changes?.length || 0));
+  }
+
   document.getElementById('xlsFootInfo').innerHTML =
-    `적용 시 영향: <strong style="color:var(--green);">업데이트 ${a.matched.length}건</strong>` +
+    `적용 시 영향: <strong style="color:var(--green);">업데이트 ${a.matched.length}건${isFinance ? ` (${financeFieldCount}개 필드)` : ''}</strong>` +
     (newCount > 0 ? ` · <strong style="color:var(--blue-text);">신규 ${newCount}건</strong>` : '') +
     (skippedCount > 0 ? ` · <span style="color:var(--gray-500);">건너뜀 ${skippedCount}건</span>` : '') +
     (a.errors.length ? ` · <span style="color:var(--danger);">오류 ${a.errors.length}건</span>` : '');
@@ -2514,6 +2655,32 @@ function closeXlsModal() {
 function applyXlsMatching() {
   const a = xlsState.analysis;
   if (!a) return;
+
+  // 💰 정산정보 — 피벗 방식 적용 (별도 처리)
+  if (xlsState.fileType === 'finance') {
+    let updCnt = 0;
+    let fieldCnt = 0;
+    a.matched.forEach(m => {
+      const item = SAMPLE.find(s => normalizePjt(s.pjt) === normalizePjt(m.pjt));
+      if (!item) return;
+      m.changes.forEach(c => {
+        item[c.field] = c.new;
+        fieldCnt++;
+      });
+      if (m.changes.length) updCnt++;
+    });
+    saveBpmsData();
+    populateFilterOptions();
+    closeXlsModal();
+    showToast(
+      `✅ 정산정보 적용: ${updCnt}건 행 · ${fieldCnt}개 필드 업데이트` +
+      (a.skipped.length ? ` · ⊘ 영업정보에 없어 ${a.skipped.length}건 건너뜀` : ''),
+      5500
+    );
+    handleSearch();
+    return;
+  }
+
   const includeNew = document.getElementById('xlsOptNew').checked;
 
   // 매칭 행 → 기존 데이터 업데이트
