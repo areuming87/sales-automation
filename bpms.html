@@ -2020,8 +2020,9 @@ let xlsState = { aoa: [], headerRowIdx: 0, rows: [], headers: [], pjtKey: null, 
 /* 파일명으로 종류 자동 감지 — 영업정보/충전기정보/정산정보 */
 function detectFileType(filename) {
   const lower = (filename || '').toLowerCase();
-  // 정산/회계/결의/비용 키워드 → finance (가장 먼저 체크)
-  if (lower.includes('정산') || lower.includes('회계') ||
+  // 세금계산서/정산/회계/결의/비용 → finance (가장 먼저 체크)
+  if (lower.includes('세금계산서') || lower.includes('세금') || lower.includes('계산서') ||
+      lower.includes('정산') || lower.includes('회계') ||
       lower.includes('결의') || lower.includes('비용') ||
       lower.includes('finance') || lower.includes('payment')) return 'finance';
   if (lower.includes('영업정보') || lower.includes('영업 정보') ||
@@ -2037,6 +2038,21 @@ const FINANCE_VALUE_COLS = [
   '세금계산서 승인번호','지출결의서 증빙번호',
 ];
 
+/* 대상 콤보 화이트리스트 — 이 4개만 백데이터에 저장됨 */
+const FINANCE_ALLOWED_COMBOS = [
+  { type: '구축비(턴키)', pay: '선금' },
+  { type: '구축비(턴키)', pay: '잔금' },
+  { type: '제조비',       pay: '선금' },
+  { type: '제조비',       pay: '잔금' },
+];
+function isAllowedFinanceCombo(type, payType) {
+  const t = String(type || '').replace(/\s+/g, '').trim();
+  const p = String(payType || '').replace(/\s+/g, '').trim();
+  return FINANCE_ALLOWED_COMBOS.some(c =>
+    c.type.replace(/\s+/g, '') === t && c.pay === p
+  );
+}
+
 function renderFileTypeInfo() {
   const el = document.getElementById('xlsFileTypeInfo');
   if (xlsState.fileType === 'sales') {
@@ -2051,9 +2067,13 @@ function renderFileTypeInfo() {
     el.style.background = '#f3e8ff';
     el.style.color = '#6b21a8';
     el.innerHTML = `💰 <strong>정산정보 (피벗 방식)</strong> — <strong>유형 + 지급구분</strong>을 결합해 새 컬럼으로 저장합니다.<br>
-      예: <code style="background:#fff;padding:1px 5px;border-radius:3px;">구축비(턴키)</code> + <code style="background:#fff;padding:1px 5px;border-radius:3px;">선금</code> →
-      <code style="background:#fff;padding:1px 5px;border-radius:3px;">구축비(턴키)선금_총액(예산)</code> 등 6개 값 컬럼 추가됨.<br>
-      💡 <strong>영업정보에 없는 PJT는 추가되지 않고 "건너뜀"으로 분류됩니다.</strong>`;
+      ⭐ <strong>대상 콤보 4종만 처리:</strong>
+      <code style="background:#fff;padding:1px 5px;border-radius:3px;">구축비(턴키)선금</code>
+      <code style="background:#fff;padding:1px 5px;border-radius:3px;">구축비(턴키)잔금</code>
+      <code style="background:#fff;padding:1px 5px;border-radius:3px;">제조비선금</code>
+      <code style="background:#fff;padding:1px 5px;border-radius:3px;">제조비잔금</code><br>
+      각 콤보 × 6개 값 컬럼(총액·세금계산서일·착공일·준공일·승인번호·증빙번호) → 최대 24개 컬럼 추가.<br>
+      💡 영업정보에 없는 PJT 및 대상 외 콤보는 자동 제외됩니다.`;
   }
 }
 
@@ -2263,17 +2283,19 @@ function reAnalyze() {
 }
 
 /* 💰 정산정보 — 유형+지급구분을 결합하여 피벗 방식으로 저장
-   한 PJT에 여러 행 매칭 가능 (각 행 = 하나의 콤보) */
+   한 PJT에 여러 행 매칭 가능 (각 행 = 하나의 콤보)
+   ⭐ 화이트리스트 적용: 구축비(턴키)선금/잔금, 제조비선금/잔금 4종만 저장 */
 function runFinanceAnalysis() {
   const { rows, pjtKey, headers } = xlsState;
-  const matched = [];  // 행 단위, 같은 PJT 여러 번 매칭 가능
+  const matched = [];
   const errors = [];
   const skipped = [];
+  let filteredOut = 0;  // 화이트리스트에 없는 콤보 (대기 콘트럭/추가공사비 등)
 
-  // 유형·지급구분 컬럼 찾기 (대소문자·공백 무시)
+  // 유형·지급구분 컬럼 찾기 (공백·대소문자 무시)
   const findCol = (keywords) => headers.find(h => keywords.some(k => normalize(h).toLowerCase().includes(k.toLowerCase())));
   const typeCol = findCol(['유형']);
-  const payCol  = findCol(['지급구분']);
+  const payCol  = findCol(['지급구분']);  // "지급 구분" 도 정규화로 매칭됨
 
   if (!typeCol || !payCol) {
     errors.push({
@@ -2283,7 +2305,7 @@ function runFinanceAnalysis() {
     });
   }
 
-  // 값 컬럼 매핑 (엑셀 헤더 ↔ FINANCE_VALUE_COLS — 공백·괄호 정규화)
+  // 값 컬럼 매핑 (엑셀 헤더 ↔ FINANCE_VALUE_COLS)
   const valueColMap = {};
   FINANCE_VALUE_COLS.forEach(col => {
     const norm = normalize(col).toLowerCase();
@@ -2300,8 +2322,10 @@ function runFinanceAnalysis() {
       }
       const type    = String(row[typeCol] ?? '').trim();
       const payType = String(row[payCol]  ?? '').trim();
-      if (!type || !payType) {
-        errors.push({ rowNo: idx + 2, code, reason: `유형(${type || '비어있음'}) 또는 지급구분(${payType || '비어있음'}) 비어있음` });
+
+      // ⭐ 화이트리스트 체크: 4개 콤보만 처리 (나머진 조용히 필터)
+      if (!isAllowedFinanceCombo(type, payType)) {
+        filteredOut++;
         return;
       }
 
@@ -2313,14 +2337,14 @@ function runFinanceAnalysis() {
         return;
       }
 
-      // 변경사항 계산 (combo_value 필드)
+      // 변경사항 계산
       const changes = [];
       Object.entries(valueColMap).forEach(([dbCol, xlsCol]) => {
         let v = row[xlsCol];
         if (v instanceof Date) v = v.toISOString().slice(0, 10);
         const newVal = String(v ?? '').trim();
         if (!newVal) return;
-        const fieldKey = `${combo}_${dbCol}`;  // 예: "구축비(턴키)선금_총액(예산)"
+        const fieldKey = `${combo}_${dbCol}`;
         const oldVal = String(existing[fieldKey] ?? '').trim();
         if (newVal !== oldVal) {
           changes.push({ header: dbCol, field: fieldKey, old: oldVal, new: newVal });
@@ -2331,7 +2355,7 @@ function runFinanceAnalysis() {
     });
   }
 
-  xlsState.analysis = { matched, newRows: [], errors, skipped, financeMeta: { typeCol, payCol, valueColMap } };
+  xlsState.analysis = { matched, newRows: [], errors, skipped, filteredOut, financeMeta: { typeCol, payCol, valueColMap } };
 
   // 카운트 UI
   document.getElementById('xlsCntMatch').textContent = matched.length;
@@ -2640,6 +2664,7 @@ function updateXlsFooter() {
     `적용 시 영향: <strong style="color:var(--green);">업데이트 ${a.matched.length}건${isFinance ? ` (${financeFieldCount}개 필드)` : ''}</strong>` +
     (newCount > 0 ? ` · <strong style="color:var(--blue-text);">신규 ${newCount}건</strong>` : '') +
     (skippedCount > 0 ? ` · <span style="color:var(--gray-500);">건너뜀 ${skippedCount}건</span>` : '') +
+    (isFinance && a.filteredOut > 0 ? ` · <span style="color:#6b21a8;">화이트리스트 외 ${a.filteredOut}건 제외</span>` : '') +
     (a.errors.length ? ` · <span style="color:var(--danger);">오류 ${a.errors.length}건</span>` : '');
   document.getElementById('btnXlsApply').disabled = total === 0;
 }
@@ -2674,8 +2699,9 @@ function applyXlsMatching() {
     closeXlsModal();
     showToast(
       `✅ 정산정보 적용: ${updCnt}건 행 · ${fieldCnt}개 필드 업데이트` +
+      (a.filteredOut ? ` · 화이트리스트 외 ${a.filteredOut}건 자동 제외` : '') +
       (a.skipped.length ? ` · ⊘ 영업정보에 없어 ${a.skipped.length}건 건너뜀` : ''),
-      5500
+      6000
     );
     handleSearch();
     return;
