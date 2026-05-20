@@ -1369,6 +1369,8 @@ const STANDARD_DB_KEYS = new Set([
   'qty_slow','qty_fast','model','inst_type',
   'reg_date','sales_date','env_date',
   'manager','year','reg_status',
+  // 정산 관련
+  'budget','invoice_date','start_date','completion_date','invoice_no','expense_no',
 ]);
 
 /* 레거시·중복 키 마이그레이션
@@ -2010,6 +2012,14 @@ const XLS_COL_MAP = {
   '영업승인일':'sales_date', '영업 승인일':'sales_date',
   '환경부승인일자':'env_date','환경부 승인일자':'env_date', '환경부승인일':'env_date', '환경부 승인일':'env_date',
 
+  // ── 정산 관련 (세금계산서 보고서뷰의 값 컬럼) ──
+  '총액(예산)':'budget', '총액예산':'budget', '총액':'budget', '예산':'budget',
+  '세금계산서작성일':'invoice_date', '세금계산서 작성일':'invoice_date',
+  '착공일':'start_date',
+  '준공완료일':'completion_date', '준공일':'completion_date',
+  '세금계산서승인번호':'invoice_no', '세금계산서 승인번호':'invoice_no',
+  '지출결의서증빙번호':'expense_no', '지출결의서 증빙번호':'expense_no',
+
   // ── 기타 ─────────────────────────────────────
   '담당자':'manager', '담당 자':'manager',
   '사업연도':'year', '사업 연도':'year', '연도':'year',
@@ -2131,10 +2141,12 @@ const KNOWN_HEADER_KEYWORDS = [
   '충전기모델','모델명','제품명','제품이름','제품 이름',
   '설치주소','설치유형','설치위치',
   '계약등록일','계약 등록일','영업승인일','환경부승인일자','환경부 승인일자',
-  '담당자','사업연도',
+  '총액(예산)','총액예산','세금계산서작성일','세금계산서 작성일','착공일','준공완료일',
+  '세금계산서승인번호','세금계산서 승인번호','지출결의서증빙번호','지출결의서 증빙번호',
+  '담당자','사업연도','유형','지급구분','지급 구분',
 ];
 
-const PARTIAL_KEYWORDS = ['pjt','프로젝트','충전기','사업구분','승인일','담당','고객사','모델','제품'];
+const PARTIAL_KEYWORDS = ['pjt','프로젝트','충전기','사업구분','승인일','담당','고객사','모델','제품','총액','세금계산서','지출결의서'];
 
 function detectHeaderRow(aoa) {
   const SCAN_LIMIT = Math.min(30, aoa.length);  // 30행까지 스캔
@@ -2483,6 +2495,9 @@ function runAnalysis() {
     qty_slow:'충전기 대수(완속)', qty_fast:'충전기 대수(급속)',
     model:'충전기모델', inst_type:'설치유형', reg_date:'계약 등록일', sales_date:'영업승인일',
     env_date:'환경부 승인일자', manager:'담당자', year:'사업연도',
+    budget:'총액(예산)', invoice_date:'세금계산서 작성일',
+    start_date:'착공일', completion_date:'준공완료일',
+    invoice_no:'세금계산서 승인번호', expense_no:'지출결의서 증빙번호',
   };
   const mappedCols = [];
   const unmappedCols = [];
@@ -2827,6 +2842,13 @@ const DL_STANDARD_FIELDS = [
   { key: 'env_date',   label: '환경부 승인일자' },
   { key: 'manager',    label: '담당자' },
   { key: 'year',       label: '사업연도' },
+  // 정산 관련 필드 (세금계산서 보고서뷰 값)
+  { key: 'budget',          label: '총액(예산)' },
+  { key: 'invoice_date',    label: '세금계산서 작성일' },
+  { key: 'start_date',      label: '착공일' },
+  { key: 'completion_date', label: '준공완료일' },
+  { key: 'invoice_no',      label: '세금계산서 승인번호' },
+  { key: 'expense_no',      label: '지출결의서 증빙번호' },
 ];
 
 function loadDlPrefs() {
