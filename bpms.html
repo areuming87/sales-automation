@@ -1192,7 +1192,7 @@
         <select id="xlsHeaderRow" onchange="reAnalyze()"></select>
       </div>
       <div class="xls-col-pick">
-        <span>PJT코드 컬럼:</span>
+        <span>PJT 코드 컬럼:</span>
         <select id="xlsPjtCol" onchange="reAnalyze()"></select>
       </div>
     </div>
@@ -1472,7 +1472,7 @@ const PAGE_SIZE = 20;
 ───────────────────────────────────────────── */
 const DEFAULT_COLUMNS = [
   { key:'reg_status', label:'누리집 등록가능',    width:140 },
-  { key:'pjt',        label:'PJT코드',           width:130 },
+  { key:'pjt',        label:'PJT 코드',          width:130 },
   { key:'name',       label:'영업현황이름',       width:200 },
   { key:'partner',    label:'시공사',            width:120 },
   { key:'biz1',       label:'사업구분1',          width:90  },
@@ -1540,12 +1540,12 @@ function manualDedupe() {
   });
 
   if (duplicates.length === 0) {
-    showToast('✅ 중복된 PJT코드가 없습니다. 모두 깨끗합니다!', 3000);
+    showToast('✅ 중복된 PJT 코드가 없습니다. 모두 깨끗합니다!', 3000);
     return;
   }
 
   const sample = [...new Set(duplicates)].slice(0, 5).join(', ');
-  if (!confirm(`중복 PJT코드 ${duplicates.length}건이 발견되었습니다.\n\n예시: ${sample}${duplicates.length > 5 ? '...' : ''}\n\n중복 행을 제거하고 데이터를 병합하시겠습니까?\n(기존 값 우선, 빈 칸만 채움)`)) return;
+  if (!confirm(`중복 PJT 코드 ${duplicates.length}건이 발견되었습니다.\n\n예시: ${sample}${duplicates.length > 5 ? '...' : ''}\n\n중복 행을 제거하고 데이터를 병합하시겠습니까?\n(기존 값 우선, 빈 칸만 채움)`)) return;
 
   const removed = dedupeSample({ merge: true });
   showToast(`🧹 중복 ${removed.length}건 정리 완료. (현재 ${SAMPLE.length}건)`, 4000);
@@ -2187,7 +2187,7 @@ function runAnalysis() {
     const code = normalizePjt(rawCode);
 
     if (!code) {
-      errors.push({ rowNo: idx + 2, reason: 'PJT코드 비어있음', data: row });
+      errors.push({ rowNo: idx + 2, reason: 'PJT 코드 비어있음', data: row });
       return;
     }
     if (!/^[A-Z]+[-_]?\d+([-_]\d+)*$/i.test(code) && !/^HN\d+$/i.test(code)) {
@@ -2199,7 +2199,7 @@ function runAnalysis() {
       const firstRow = dupInBatch.get(code);
       errors.push({
         rowNo: idx + 2, code,
-        reason: `엑셀 내 중복 — ${firstRow}행과 동일한 PJT코드 (이 행은 무시됨)`,
+        reason: `엑셀 내 중복 — ${firstRow}행과 동일한 PJT 코드 (이 행은 무시됨)`,
         data: row,
       });
       return;
@@ -2529,7 +2529,7 @@ let dlState = { mode: 'all', selectedFields: new Set(), allFields: [], fieldOrde
 
 const DL_STANDARD_FIELDS = [
   { key: 'reg_status', label: '누리집등록가능' },
-  { key: 'pjt',        label: 'PJT코드' },
+  { key: 'pjt',        label: 'PJT 코드' },
   { key: 'name',       label: '영업현황이름' },
   { key: 'partner',    label: '시공사' },
   { key: 'biz1',       label: '사업구분1' },
