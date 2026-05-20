@@ -62,17 +62,63 @@ def manual_login(page):
     input("\n  ➤ 로그인 완료 후 Enter 키 입력: ")
 
 
+# ──── Salesforce 리다이렉트 대응 안전한 navigation ────────
+def safe_goto(page, url, max_retries=3):
+    """Salesforce는 my.salesforce.com 으로 SSO 리다이렉트 하기 때문에
+    page.goto 가 'interrupted by another navigation' 으로 실패할 수 있음.
+    재시도 + 리다이렉트 안정화 대기."""
+    last_err = None
+    for i in range(max_retries):
+        try:
+            # commit = 네비게이션 시작만 확인 (리다이렉트 발생해도 OK)
+            page.goto(url, wait_until="commit", timeout=60000)
+            # URL이 우리가 원하는 곳에 안착했는지 확인 (최대 20초)
+            target_path = url.split('?')[0].split('://')[-1].split('/', 1)[-1]
+            for _ in range(20):
+                cur = page.url
+                if target_path in cur or 'Report' in cur:
+                    # 우리 URL에 도착 — 추가로 DOM 로드 대기
+                    try:
+                        page.wait_for_load_state("domcontentloaded", timeout=30000)
+                    except PWTimeout:
+                        pass
+                    return True
+                time.sleep(1)
+            # URL 안 바뀌면 한 번 더 시도
+            print(f"  ⚠ URL 안착 안 됨 (현재: {page.url[:80]}...) — 재시도")
+            continue
+        except Exception as e:
+            last_err = e
+            msg = str(e)
+            if "interrupted by another navigation" in msg or "Timeout" in msg:
+                print(f"  ⚠ 리다이렉트 인터럽트 ({i+1}/{max_retries}) — 재시도...")
+                time.sleep(3)
+                # 한 번 더 같은 URL로 시도 — 두번째는 보통 성공
+                continue
+            raise
+    if last_err:
+        raise last_err
+    return False
+
+
 # ──── 단계 2. 보고서뷰 한 개 다운로드 ────────────────────
 def download_report(page, name, url, attempt=1):
-    print(f"\n📥 [{name}] 다운로드 시작 ... ({url[:50]}...)")
-    page.goto(url, wait_until="domcontentloaded", timeout=120000)
+    print(f"\n📥 [{name}] 다운로드 시작 ...")
+    print(f"  🌐 {url[:70]}...")
+
+    # Salesforce SSO 리다이렉트 대응 navigation
+    try:
+        safe_goto(page, url)
+    except Exception as e:
+        print(f"  ✗ 페이지 이동 실패: {e}")
+        return None
 
     # Lightning 보고서 UI 로딩 대기
     print("  ⏳ 보고서 로딩 대기 중...")
     try:
         page.wait_for_load_state("networkidle", timeout=60000)
     except PWTimeout:
-        pass  # 무한 폴링되는 경우가 있음 — 일정 시간 후 진행
+        pass
     time.sleep(5)
 
     # ── 1. 편집 버튼 옆 ▼ (chevron-down) 메뉴 열기
