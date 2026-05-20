@@ -26,3 +26,10 @@ desktop.ini
 *.key
 credentials.json
 .env
+
+# Python automation
+automation/downloads/
+automation/session_state.json
+automation/__pycache__/
+*.pyc
+
