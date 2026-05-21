@@ -77,13 +77,13 @@ def safe_goto(page, url, max_retries=3):
             for _ in range(20):
                 cur = page.url
                 if target_path in cur or 'Report' in cur:
-                    # 우리 URL에 도착 — 추가로 DOM 로드 대기
+                    # 우리 URL에 도착 — DOM이 어느 정도 만들어졌는지 짧게 확인
                     try:
-                        page.wait_for_load_state("domcontentloaded", timeout=30000)
+                        page.wait_for_load_state("domcontentloaded", timeout=10000)
                     except PWTimeout:
                         pass
                     return True
-                time.sleep(1)
+                time.sleep(0.5)
             # URL 안 바뀌면 한 번 더 시도
             print(f"  ⚠ URL 안착 안 됨 (현재: {page.url[:80]}...) — 재시도")
             continue
@@ -113,13 +113,21 @@ def download_report(page, name, url, attempt=1):
         print(f"  ✗ 페이지 이동 실패: {e}")
         return None
 
-    # Lightning 보고서 UI 로딩 대기
-    print("  ⏳ 보고서 로딩 대기 중...")
+    # Lightning 보고서 UI 로딩 대기 — networkidle 안 쓰고 '편집' 버튼 등장으로 판정
+    # (Salesforce는 백그라운드 폴링이 끊임없어서 networkidle 이벤트가 안 발동 → 매번 60초 풀 대기 발생)
+    print("  ⏳ 편집 버튼 표시 대기 중...")
+    t0 = time.time()
+    edit_visible = False
     try:
-        page.wait_for_load_state("networkidle", timeout=60000)
+        # 편집 버튼이 보이면 UI 준비 완료로 간주
+        page.get_by_role('button', name='편집').first.wait_for(state='visible', timeout=60000)
+        edit_visible = True
+        elapsed = time.time() - t0
+        print(f"     ✓ 준비 완료 ({elapsed:.1f}초)")
     except PWTimeout:
-        pass
-    time.sleep(5)
+        print(f"     ⚠ 편집 버튼 미발견 — 그래도 진행")
+    # 마지막 안정화 짧은 대기
+    time.sleep(1.5)
 
     # ── 1. 편집 옆 ▼ 메뉴 열기 (Lightning Shadow DOM/iframe 대응)
     print("  🔽 [편집 옆 ▼] 메뉴 열기...")
