@@ -333,6 +333,16 @@ def auto_upload_to_webapp(page, downloaded):
             except Exception:
                 pass
 
+            # ⭐ 영업정보 파일이면 "마스터 정리" 옵션 체크 → 영업정보에 없는 PJT 자동 삭제
+            if '영업정보' in name:
+                try:
+                    cleanup_chk = page.locator('#xlsOptCleanup')
+                    if cleanup_chk.count() > 0 and not cleanup_chk.is_checked():
+                        cleanup_chk.check()
+                        print("  🧹 마스터 정리 옵션 체크 — 이 업로드에 없는 기존 PJT 삭제")
+                except Exception:
+                    pass
+
             # ⑤ 적용 버튼 클릭
             btn = page.locator('#btnXlsApply')
             disabled = btn.is_disabled()
