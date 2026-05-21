@@ -19,6 +19,13 @@ import time
 import sys
 import os
 
+# ──── Windows stdout 인코딩 — UTF-8 강제 (cp949 에러 회피) ──
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 # ──── 환경 ────────────────────────────────────────────────
 os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", r"C:\playwright_browsers")
 SCRIPT_DIR = Path(__file__).parent
@@ -154,8 +161,8 @@ if __name__ == "__main__":
     print("=" * 60)
     print(" BPMS Automation Bridge Server")
     print("=" * 60)
-    print(f" 📂 스크립트: {DOWNLOAD_SCRIPT}")
-    print(f" 🌐 주소: http://localhost:8765")
-    print(f" 💡 이 창을 켜둔 상태로 웹앱의 [BPMS 불러오기] 사용 가능")
+    print(f" Script: {DOWNLOAD_SCRIPT}")
+    print(f" Address: http://localhost:8765")
+    print(f" Keep this window OPEN to use [BPMS Load] in web app")
     print("=" * 60)
     uvicorn.run(app, host="127.0.0.1", port=8765, log_level="warning")
