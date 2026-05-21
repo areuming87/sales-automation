@@ -24,6 +24,11 @@ os.makedirs(USER_DATA_DIR, exist_ok=True)
 
 # ──── 설정 ────────────────────────────────────────────────
 LOGIN_URL = "https://gschargev.lightning.force.com/lightning/page/home"
+# 다운로드 후 자동 업로드할 웹앱 URL (GitHub Pages 배포본)
+WEBAPP_URL = "https://areuming87.github.io/sales-automation/bpms.html"
+# 로컬 테스트하려면 위 줄 주석 처리하고 아래 사용:
+# WEBAPP_URL = f"file:///{(Path(__file__).parent.parent / 'bpms.html').as_posix()}"
+
 SCRIPT_DIR = Path(__file__).parent
 DOWNLOAD_DIR = SCRIPT_DIR / "downloads"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
@@ -256,6 +261,102 @@ def download_report(page, name, url, attempt=1):
         return None
 
 
+# ──── 단계 3. 웹앱 자동 업로드 (선택) ─────────────────────
+def auto_upload_to_webapp(page, downloaded):
+    """다운로드된 엑셀들을 bpms.html 웹앱에 자동 업로드 + 매칭 적용
+    downloaded: [(name, Path), ...] — name이 보고서 종류 식별용"""
+    successes = [(n, p) for n, p, *_ in downloaded if p and p.exists()]
+    if not successes:
+        print("\n⚠ 업로드할 파일이 없습니다.")
+        return
+
+    banner("웹앱 자동 업로드")
+    print(f"  🌐 대상: {WEBAPP_URL}")
+    print(f"  📤 업로드 대상: {len(successes)}개 파일\n")
+
+    # 웹앱 이동
+    page.goto(WEBAPP_URL, wait_until="domcontentloaded", timeout=60000)
+    try:
+        page.wait_for_load_state("domcontentloaded", timeout=20000)
+    except PWTimeout:
+        pass
+    time.sleep(2)
+
+    for name, fp in successes:
+        print(f"\n📤 [{name}] {fp.name}")
+        try:
+            # ① 숨겨진 <input type="file"> 에 직접 파일 설정 (handleUpload 우회)
+            file_input = page.locator('#fileInput')
+            file_input.set_input_files(str(fp))
+            print("  ⏳ 매핑 모달 열림 대기...")
+
+            # ② 매핑 모달 열림 대기
+            page.wait_for_selector('#xlsModal.active', timeout=30000)
+            time.sleep(1)
+
+            # ③ 분석 완료 대기 (적용 버튼이 활성화될 때까지)
+            print("  🔍 분석 진행 중...")
+            try:
+                page.wait_for_function(
+                    """() => {
+                        const m = document.getElementById('xlsModal');
+                        const b = document.getElementById('btnXlsApply');
+                        if (!m || !m.classList.contains('active')) return false;
+                        return b && !b.disabled;
+                    }""",
+                    timeout=90000
+                )
+            except PWTimeout:
+                # 전체 행이 신규/오류라서 적용 버튼이 비활성화일 수도 있음
+                print("  ⚠ 적용 가능한 데이터가 없는 것 같음 (또는 분석 시간 초과)")
+
+            # ④ 매칭 결과 카운트 출력 (참고용)
+            try:
+                cnt_match = page.locator('#xlsCntMatch').text_content() or '?'
+                cnt_new   = page.locator('#xlsCntNew').text_content() or '?'
+                cnt_err   = page.locator('#xlsCntErr').text_content() or '?'
+                print(f"  📊 분석: 매칭 {cnt_match} / 신규 {cnt_new} / 오류 {cnt_err}")
+            except Exception:
+                pass
+
+            # ⑤ 적용 버튼 클릭
+            btn = page.locator('#btnXlsApply')
+            disabled = btn.is_disabled()
+            if disabled:
+                print("  ⚠ 적용 버튼 비활성 — 모달 닫고 다음")
+                page.locator('#xlsModal .xls-close').click()
+                time.sleep(1)
+                continue
+
+            print("  ✅ 매칭 적용하기 클릭...")
+            btn.click()
+
+            # ⑥ 모달 닫힘 대기
+            try:
+                page.wait_for_function(
+                    """() => !document.getElementById('xlsModal').classList.contains('active')""",
+                    timeout=60000
+                )
+                print(f"  ✓ {name} 업로드 완료")
+            except PWTimeout:
+                print(f"  ⚠ 모달 닫힘 확인 못 함 (실제 적용은 됐을 가능성 높음)")
+
+            time.sleep(2)  # 다음 업로드 전 안정화
+        except Exception as e:
+            print(f"  ✗ {name} 업로드 실패: {e}")
+            # 모달 열린 상태로 남아있으면 닫기
+            try:
+                if page.locator('#xlsModal.active').count() > 0:
+                    page.keyboard.press('Escape')
+                    time.sleep(0.5)
+            except Exception:
+                pass
+
+    banner("웹앱 업로드 완료")
+    print(f"  🔗 웹앱 보기: {WEBAPP_URL}")
+    print("  💡 브라우저에서 결과를 확인하세요. (담당자별·검색 필터 등도 사용 가능)\n")
+
+
 # ──── 메인 ────────────────────────────────────────────────
 def main():
     banner("BPMS 보고서 자동 다운로드")
@@ -305,7 +406,19 @@ def main():
         success_cnt = sum(1 for _, s, _ in results if "성공" in s)
         print(f"\n📊 {success_cnt}/{len(REPORTS)} 성공\n")
 
-        input("✅ 종료하려면 Enter ... ")
+        # 4. 다운로드 성공 건이 있으면 웹앱 자동 업로드 진행
+        if success_cnt > 0:
+            ans = input("🌐 웹앱에 자동 업로드 하시겠습니까? (Y/n): ").strip().lower()
+            if ans in ('', 'y', 'yes'):
+                try:
+                    auto_upload_to_webapp(page, results)
+                except Exception as e:
+                    print(f"\n✗ 자동 업로드 중 오류: {e}")
+            else:
+                print("\n  ℹ 업로드 건너뜀. 수동으로 업로드하려면:")
+                print(f"     {WEBAPP_URL}")
+
+        input("\n✅ 종료하려면 Enter ... ")
         context.close()
 
 
