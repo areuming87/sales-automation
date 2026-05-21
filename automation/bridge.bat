@@ -7,6 +7,12 @@ set PLAYWRIGHT_BROWSERS_PATH=C:\playwright_browsers
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
 
+REM Clean up any orphan process holding port 8765
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8765" ^| findstr "LISTENING"') do (
+    echo Found orphan process on port 8765 (PID %%a). Killing...
+    taskkill /F /PID %%a > nul 2>&1
+)
+
 echo.
 echo ====================================================
 echo   BPMS Bridge Server
