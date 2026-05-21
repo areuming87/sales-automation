@@ -9,7 +9,7 @@
 ═══════════════════════════════════════════════════════════════
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pathlib import Path
@@ -36,17 +36,35 @@ app = FastAPI(title="BPMS Automation Bridge", version="1.0")
 # CORS — github.io 와 file:// 와 localhost 모두 허용
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://areuming87.github.io",
-        "http://localhost",
-        "http://127.0.0.1",
-        "null",  # file:// 프로토콜
-    ],
-    allow_origin_regex=r"(https://.*\.github\.io|http://localhost.*|http://127\.0\.0\.1.*)",
+    allow_origins=["*"],   # 로컬 자동화 도구라 origin 제한 안 함
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=False,
+    expose_headers=["*"],
 )
+
+
+# ⭐ Chrome 의 Private Network Access (PNA) 헤더 자동 부착
+# HTTPS(github.io) → HTTP(localhost) 요청을 막는 정책 우회용
+@app.middleware("http")
+async def add_pna_headers(request: Request, call_next):
+    if request.method == "OPTIONS":
+        # 프리플라이트 요청에 PNA 허용 + CORS 헤더 직접 응답
+        return Response(
+            content="",
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Private-Network": "true",
+                "Access-Control-Max-Age": "86400",
+            },
+        )
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
 
 # ──── 작업 상태 ────────────────────────────────────────────
 state = {
