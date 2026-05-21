@@ -65,35 +65,52 @@ def manual_login(page):
     page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
 
     if AUTO_MODE:
-        # 자동 모드 — 먼저 세션 유효성 빠르게 확인
         print("🤖 [AUTO 모드] 세션 유효성 확인 중...")
         time.sleep(4)
-        cur = page.url.lower()
 
         def is_logged_in():
-            u = page.url.lower()
-            return ("login" not in u and "checkpoint" not in u
-                    and ("page/home" in u or "lightning.force.com/lightning" in u))
+            """로그인되지 않은 URL 패턴들을 제외 — 그 외는 로그인된 것으로 간주"""
+            u = (page.url or '').lower()
+            if not u or u == 'about:blank' or u.startswith('chrome'):
+                return False
+            # 로그인 진행 중인 URL 패턴
+            login_indicators = [
+                'login.salesforce.com',
+                '/login',
+                '/checkpoint',
+                '/authcomplete',
+                '/secur/',
+                'ec=302',           # SSO 리다이렉트 진행중 (?ec=302&startURL=...)
+                'starturl=',        # SSO startURL 파라미터
+                'frontdoor.jsp',    # SSO 전환 페이지
+            ]
+            if any(p in u for p in login_indicators):
+                return False
+            # Salesforce 도메인 안이고 위 패턴 없으면 로그인됨
+            return ('salesforce.com' in u or 'force.com' in u)
 
         if is_logged_in():
-            print("✓ 기존 세션 유효 — 자동 로그인됨")
+            print(f"✓ 기존 세션 유효 — 자동 로그인됨 (URL: {page.url[:80]})")
             return True
 
-        # 세션 만료 — 사용자가 직접 로그인할 시간 제공 (최대 120초 대기)
+        # 세션 만료 — 사용자에게 직접 로그인 기회 제공
         print("=" * 60)
         print("⚠ 세션 만료 감지 — 브라우저에서 직접 로그인해주세요")
+        print(f"   현재 URL: {page.url[:100]}")
         print("⏳ 최대 120초까지 기다립니다. 로그인 완료되면 자동 진행됩니다.")
         print("=" * 60)
         for i in range(60):  # 60 * 2초 = 최대 120초
             time.sleep(2)
             if is_logged_in():
                 print(f"✓ 로그인 감지됨 ({(i+1)*2}초 만에) — 자동 진행 시작")
-                time.sleep(2)  # 페이지 안정화
+                print(f"   현재 URL: {page.url[:100]}")
+                time.sleep(2)  # 안정화
                 return True
             if (i + 1) % 5 == 0:
-                print(f"  ... 여전히 로그인 대기 중 ({(i+1)*2}초 경과)")
+                # 5초마다 현재 URL 도 함께 로그 (어떤 페이지에 있는지 디버깅용)
+                print(f"  ... 대기 중 ({(i+1)*2}초) — URL: {page.url[:90]}")
 
-        print("✗ 120초 안에 로그인 완료되지 않음 — 종료")
+        print(f"✗ 120초 안에 로그인 완료되지 않음 — 종료 (마지막 URL: {page.url[:80]})")
         return False
 
     print("\n" + "▼" * 60)
