@@ -31,5 +31,6 @@ credentials.json
 automation/downloads/
 automation/session_state.json
 automation/__pycache__/
+automation/debug_*.png
 *.pyc
 
