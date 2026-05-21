@@ -37,10 +37,11 @@ DOWNLOAD_DIR.mkdir(exist_ok=True)
 STORAGE_STATE = SCRIPT_DIR / "session_state.json"
 
 REPORTS = [
-    ("영업정보",   "https://gschargev.lightning.force.com/lightning/r/Report/00OTJ00000q8ns12AA/view?queryScope=userFolders"),
-    ("충전기정보", "https://gschargev.lightning.force.com/lightning/r/Report/00OTJ00000mDkau2AC/view?queryScope=userFolders"),
-    ("전암검외",   "https://gschargev.lightning.force.com/lightning/r/Report/00OTJ00000qOHpp2AG/view?queryScope=userFolders"),
-    ("세금계산서", "https://gschargev.lightning.force.com/lightning/r/Report/00OTJ00000qLYOz2AO/view?queryScope=userFolders"),
+    # (저장될 파일명(.xlsx 자동 추가), 보고서뷰 URL)
+    ("BPMS_영업현황 자동화_영업정보",   "https://gschargev.lightning.force.com/lightning/r/Report/00OTJ00000q8ns12AA/view?queryScope=userFolders"),
+    ("BPMS_영업현황 자동화_충전기정보", "https://gschargev.lightning.force.com/lightning/r/Report/00OTJ00000mDkau2AC/view?queryScope=userFolders"),
+    ("BPMS_영업현황 자동화_전암검 외",  "https://gschargev.lightning.force.com/lightning/r/Report/00OTJ00000qOHpp2AG/view?queryScope=userFolders"),
+    ("BPMS_영업현황 자동화_세금계산서", "https://gschargev.lightning.force.com/lightning/r/Report/00OTJ00000qLYOz2AO/view?queryScope=userFolders"),
 ]
 
 
@@ -243,10 +244,16 @@ def download_report(page, name, url, attempt=1):
             popup_btn.click(timeout=10000)
 
         download = download_info.value
-        safe = safe_filename(name)
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        # 지정된 파일명으로 저장 (확장자는 다운로드된 원본 따라감, 보통 .xlsx)
         suggested = download.suggested_filename or "report.xlsx"
-        target = DOWNLOAD_DIR / f"{safe}_{timestamp}_{suggested}"
+        ext = Path(suggested).suffix or ".xlsx"
+        target = DOWNLOAD_DIR / f"{name}{ext}"
+        # 기존 파일이 있으면 덮어쓰기 (먼저 삭제)
+        if target.exists():
+            try:
+                target.unlink()
+            except Exception:
+                pass
         download.save_as(target)
         print(f"  ✓ 저장 완료: {target.name}")
         return target
