@@ -65,17 +65,36 @@ def manual_login(page):
     page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
 
     if AUTO_MODE:
-        # 자동 모드 — 세션이 살아있다고 가정하고 잠시 대기 후 진행
+        # 자동 모드 — 먼저 세션 유효성 빠르게 확인
         print("🤖 [AUTO 모드] 세션 유효성 확인 중...")
         time.sleep(4)
         cur = page.url.lower()
-        if "login" in cur or "checkpoint" in cur or "page/home" not in cur:
-            # 로그인이 필요한 상태로 보임
-            print(f"⚠ 자동 로그인 실패 — 세션 만료된 것 같음 (현재 URL: {page.url[:80]})")
-            print("⚠ 먼저 run.bat 으로 수동 로그인하여 세션을 갱신해주세요.")
-            return False
-        print("✓ 기존 세션 유효 — 자동 로그인됨")
-        return True
+
+        def is_logged_in():
+            u = page.url.lower()
+            return ("login" not in u and "checkpoint" not in u
+                    and ("page/home" in u or "lightning.force.com/lightning" in u))
+
+        if is_logged_in():
+            print("✓ 기존 세션 유효 — 자동 로그인됨")
+            return True
+
+        # 세션 만료 — 사용자가 직접 로그인할 시간 제공 (최대 120초 대기)
+        print("=" * 60)
+        print("⚠ 세션 만료 감지 — 브라우저에서 직접 로그인해주세요")
+        print("⏳ 최대 120초까지 기다립니다. 로그인 완료되면 자동 진행됩니다.")
+        print("=" * 60)
+        for i in range(60):  # 60 * 2초 = 최대 120초
+            time.sleep(2)
+            if is_logged_in():
+                print(f"✓ 로그인 감지됨 ({(i+1)*2}초 만에) — 자동 진행 시작")
+                time.sleep(2)  # 페이지 안정화
+                return True
+            if (i + 1) % 5 == 0:
+                print(f"  ... 여전히 로그인 대기 중 ({(i+1)*2}초 경과)")
+
+        print("✗ 120초 안에 로그인 완료되지 않음 — 종료")
+        return False
 
     print("\n" + "▼" * 60)
     print("  👤 브라우저에서 직접 로그인해주세요.")

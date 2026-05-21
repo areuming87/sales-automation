@@ -3297,7 +3297,7 @@ async function handleBpmsLoadReal() {
 
   // 모달 초기화
   document.getElementById('bpmsModalTitle').textContent = '🌐 BPMS 자동화 실행 중...';
-  document.getElementById('bpmsModalSub').textContent = '브리지 서버에 작업 요청 전송';
+  document.getElementById('bpmsModalSub').innerHTML = '브리지 서버에 작업 요청 전송<br><span style="color:#92400e;font-size:11px;">💡 세션 만료 시 브라우저에서 직접 로그인하세요 (최대 120초 대기)</span>';
   document.getElementById('bpmsProgressBar').style.width = '0%';
   document.getElementById('bpmsResult').style.display = 'none';
   document.getElementById('bpmsOkBtn').style.display = 'none';
@@ -3376,7 +3376,7 @@ async function handleBpmsLoadReal() {
         break;
       }
 
-      if (pollCount > 400) throw new Error('타임아웃 (10분+) — 브리지 콘솔 확인 필요');
+      if (pollCount > 800) throw new Error('타임아웃 (20분+) — 브리지 콘솔 확인 필요');
     }
   } catch (err) {
     document.getElementById('bpmsModalTitle').textContent = '❌ 오류';
