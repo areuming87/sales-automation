@@ -3347,10 +3347,20 @@ async function handleBpmsLoadReal() {
       if (status.status === 'done' || status.status === 'error') {
         barEl.style.width = '100%';
         const ok = status.status === 'done';
-        document.getElementById('bpmsModalTitle').textContent = ok ? '✅ BPMS 자동화 완료!' : '❌ 자동화 오류';
-        document.getElementById('bpmsModalSub').textContent = ok
-          ? '4개 보고서 다운로드 + DB 업데이트 완료. [확인] 누르면 새로고침됩니다.'
-          : `오류 발생 (exit: ${status.exit_code})`;
+        let title, sub;
+        if (ok) {
+          title = '✅ BPMS 자동화 완료!';
+          sub = '4개 보고서 다운로드 + DB 업데이트 완료. [확인] 누르면 새로고침됩니다.';
+        } else if (status.exit_code === 2) {
+          // 로그인 실패 (세션 만료)
+          title = '🔐 Salesforce 세션 만료';
+          sub = '팀 PC에서 automation/run.bat 을 1회 실행해 로그인하면 다시 사용 가능합니다.';
+        } else {
+          title = '❌ 자동화 오류';
+          sub = `오류 발생 (exit: ${status.exit_code}) — 자세한 내용은 위 로그 확인`;
+        }
+        document.getElementById('bpmsModalTitle').textContent = title;
+        document.getElementById('bpmsModalSub').textContent = sub;
         document.getElementById('bpmsOkBtn').style.display = 'inline-block';
         document.getElementById('bpmsOkBtn').textContent = '확인';
         document.getElementById('bpmsOkBtn').onclick = () => {

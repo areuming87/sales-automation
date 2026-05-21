@@ -423,8 +423,9 @@ def main():
         login_ok = manual_login(page)
         if not login_ok:
             print("\n❌ 로그인 실패로 종료합니다.")
+            print("💡 해결법: automation/run.bat 을 1회 수동 실행해서 로그인 → 다시 시도")
             context.close()
-            return
+            sys.exit(2)  # 로그인 실패 = exit code 2 (웹앱에서 '오류'로 인식)
 
         # persistent context 는 자동으로 user_data_dir 에 세션 저장됨
         print(f"  💾 다음 실행 시 자동 로그인 됩니다 (세션 유지)")
