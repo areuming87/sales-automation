@@ -2027,18 +2027,22 @@ const XLS_COL_MAP = {
 
 let xlsState = { aoa: [], headerRowIdx: 0, rows: [], headers: [], pjtKey: null, fileName: '', current: 'match', analysis: null, fileType: 'sales' };
 
-/* 파일명으로 종류 자동 감지 — 영업정보/충전기정보/정산정보 */
+/* 파일명으로 종류 자동 감지 — 영업정보/충전기정보(+전암검)/정산정보 */
 function detectFileType(filename) {
   const lower = (filename || '').toLowerCase();
-  // 세금계산서/정산/회계/결의/비용 → finance (가장 먼저 체크)
-  if (lower.includes('세금계산서') || lower.includes('세금') || lower.includes('계산서') ||
-      lower.includes('정산') || lower.includes('회계') ||
-      lower.includes('결의') || lower.includes('비용') ||
-      lower.includes('finance') || lower.includes('payment')) return 'finance';
-  if (lower.includes('영업정보') || lower.includes('영업 정보') ||
-      lower.includes('영업현황') || lower.includes('sales')) return 'sales';
-  if (lower.includes('충전기정보') || lower.includes('충전기 정보') ||
-      lower.includes('충전기') || lower.includes('charger')) return 'charger';
+  // ⚠ 모든 파일이 "영업현황 자동화"를 포함하므로 그 키워드는 제외하고
+  //    구분자(파일명 뒷부분의 종류 키워드)로 판정
+
+  // 1️⃣ finance: 세금계산서/정산/회계/결의/비용
+  if (/세금계산서|세금|계산서|정산|회계|결의|finance|payment/i.test(lower)) return 'finance';
+
+  // 2️⃣ charger (보조): 충전기 / 전암검 / 전기안전 / 점검 / 안전점검
+  if (/충전기|charger|전암검|전기안전|점검|안전점검/i.test(lower)) return 'charger';
+
+  // 3️⃣ sales (마스터): 영업정보
+  if (/영업정보|영업 정보|sales/i.test(lower)) return 'sales';
+
+  // 기본값 = sales (안전한 디폴트 — 신규 PJT 추가 가능)
   return 'sales';
 }
 
