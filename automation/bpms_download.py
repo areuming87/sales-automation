@@ -15,6 +15,10 @@ from pathlib import Path
 import time
 import sys
 import os
+import argparse
+
+# --auto 모드: 모든 input() 프롬프트 스킵 (브리지 서버에서 호출 시 사용)
+AUTO_MODE = '--auto' in sys.argv
 
 # ⚠ 한글 사용자명(서아름) 경로에서 Playwright 프로세스 spawn 실패 회피
 # → 브라우저 + 유저 데이터 디렉토리를 ASCII 경로로 강제
@@ -60,12 +64,26 @@ def manual_login(page):
     print("브라우저를 Salesforce 로그인 페이지로 이동합니다...")
     page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
 
+    if AUTO_MODE:
+        # 자동 모드 — 세션이 살아있다고 가정하고 잠시 대기 후 진행
+        print("🤖 [AUTO 모드] 세션 유효성 확인 중...")
+        time.sleep(4)
+        cur = page.url.lower()
+        if "login" in cur or "checkpoint" in cur or "page/home" not in cur:
+            # 로그인이 필요한 상태로 보임
+            print(f"⚠ 자동 로그인 실패 — 세션 만료된 것 같음 (현재 URL: {page.url[:80]})")
+            print("⚠ 먼저 run.bat 으로 수동 로그인하여 세션을 갱신해주세요.")
+            return False
+        print("✓ 기존 세션 유효 — 자동 로그인됨")
+        return True
+
     print("\n" + "▼" * 60)
     print("  👤 브라우저에서 직접 로그인해주세요.")
     print("  로그인 완료 후 메인 화면(Lightning 대시보드)이 보이면")
     print("  아래에서 Enter 키를 누르세요.")
     print("▲" * 60)
     input("\n  ➤ 로그인 완료 후 Enter 키 입력: ")
+    return True
 
 
 # ──── Salesforce 리다이렉트 대응 안전한 navigation ────────
@@ -401,8 +419,12 @@ def main():
         )
         page = context.pages[0] if context.pages else context.new_page()
 
-        # 1. 로그인 페이지 → 사용자 대기
-        manual_login(page)
+        # 1. 로그인 페이지 → 사용자 대기 (AUTO 모드는 세션 유효성 체크만)
+        login_ok = manual_login(page)
+        if not login_ok:
+            print("\n❌ 로그인 실패로 종료합니다.")
+            context.close()
+            return
 
         # persistent context 는 자동으로 user_data_dir 에 세션 저장됨
         print(f"  💾 다음 실행 시 자동 로그인 됩니다 (세션 유지)")
@@ -432,17 +454,30 @@ def main():
 
         # 4. 다운로드 성공 건이 있으면 웹앱 자동 업로드 진행
         if success_cnt > 0:
-            ans = input("🌐 웹앱에 자동 업로드 하시겠습니까? (Y/n): ").strip().lower()
-            if ans in ('', 'y', 'yes'):
+            if AUTO_MODE:
+                # 자동 모드 — 무조건 업로드 진행
+                print("\n🌐 [AUTO 모드] 웹앱 자동 업로드 시작...")
                 try:
                     auto_upload_to_webapp(page, results)
                 except Exception as e:
                     print(f"\n✗ 자동 업로드 중 오류: {e}")
             else:
-                print("\n  ℹ 업로드 건너뜀. 수동으로 업로드하려면:")
-                print(f"     {WEBAPP_URL}")
+                ans = input("🌐 웹앱에 자동 업로드 하시겠습니까? (Y/n): ").strip().lower()
+                if ans in ('', 'y', 'yes'):
+                    try:
+                        auto_upload_to_webapp(page, results)
+                    except Exception as e:
+                        print(f"\n✗ 자동 업로드 중 오류: {e}")
+                else:
+                    print("\n  ℹ 업로드 건너뜀. 수동으로 업로드하려면:")
+                    print(f"     {WEBAPP_URL}")
 
-        input("\n✅ 종료하려면 Enter ... ")
+        if AUTO_MODE:
+            # 자동 모드 — 짧게 대기 후 닫음
+            print("\n✅ AUTO 모드 완료 — 5초 후 브라우저 닫힘")
+            time.sleep(5)
+        else:
+            input("\n✅ 종료하려면 Enter ... ")
         context.close()
 
 
