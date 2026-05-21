@@ -264,8 +264,13 @@ def download_report(page, name, url, attempt=1):
 # ──── 단계 3. 웹앱 자동 업로드 (선택) ─────────────────────
 def auto_upload_to_webapp(page, downloaded):
     """다운로드된 엑셀들을 bpms.html 웹앱에 자동 업로드 + 매칭 적용
-    downloaded: [(name, Path), ...] — name이 보고서 종류 식별용"""
-    successes = [(n, p) for n, p, *_ in downloaded if p and p.exists()]
+    downloaded: [(name, status_str, detail), ...]
+                detail은 성공 시 Path, 실패 시 str/None"""
+    # Path 객체이고 실제로 존재하는 파일만 필터
+    successes = [
+        (name, detail) for name, status, detail in downloaded
+        if isinstance(detail, Path) and detail.exists()
+    ]
     if not successes:
         print("\n⚠ 업로드할 파일이 없습니다.")
         return
