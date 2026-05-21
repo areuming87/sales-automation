@@ -116,17 +116,38 @@ def manual_login(context, page):
             if logged_page:
                 print(f"✓ 로그인 감지됨 ({(i+1)*2}초 만에)")
                 print(f"   활성 페이지 URL: {logged_page.url[:100]}")
-                # 만약 다른 탭에서 로그인했으면 그 탭으로 전환
                 try:
                     logged_page.bring_to_front()
                 except Exception:
                     pass
-                time.sleep(2)  # 안정화
+                time.sleep(2)
                 return True, logged_page
-            if (i + 1) % 5 == 0:
-                # 5초마다 모든 탭 URL 출력 (디버깅)
-                all_urls = [p.url[:60] for p in context.pages]
-                print(f"  ... 대기 중 ({(i+1)*2}초) — 탭 {len(all_urls)}개: {all_urls}")
+
+            # 매 20초마다: 모든 탭 URL 디버그 출력 + 강제로 home URL 재navigation 시도
+            if (i + 1) % 10 == 0:
+                pages_info = []
+                for idx, p in enumerate(context.pages):
+                    try:
+                        pages_info.append(f"  탭{idx}: {p.url[:90]}")
+                    except Exception as e:
+                        pages_info.append(f"  탭{idx}: <오류 {e}>")
+                print(f"  ... 대기 중 ({(i+1)*2}초) — 컨텍스트의 모든 탭:")
+                for line in pages_info:
+                    print(line)
+
+                # 🔄 강제 navigation 시도 — 세션이 있으면 home 으로 가짐
+                print(f"  🔄 page.goto({LOGIN_URL}) 강제 시도 (세션 유효성 재확인)")
+                try:
+                    page.goto(LOGIN_URL, wait_until="commit", timeout=10000)
+                    time.sleep(3)
+                    logged_page = find_logged_in_page(context)
+                    if logged_page:
+                        print(f"     ✓ 강제 navigation 후 로그인 감지됨!")
+                        print(f"     URL: {logged_page.url[:100]}")
+                        time.sleep(2)
+                        return True, logged_page
+                except Exception as e:
+                    print(f"     ⚠ navigation 실패: {e}")
 
         print(f"✗ 120초 안에 로그인 완료되지 않음 — 종료")
         return False, page
