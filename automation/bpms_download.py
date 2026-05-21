@@ -60,7 +60,36 @@ def safe_filename(name):
 
 
 # ──── 단계 1. 로그인 페이지 열고 사용자 대기 ─────────────
-def manual_login(page):
+LOGIN_INDICATORS = [
+    'login.salesforce.com',  '/login',  '/checkpoint',
+    '/authcomplete',         '/secur/',
+    'ec=302',                'starturl=',  'frontdoor.jsp',  # SSO 진행 중
+]
+
+def _page_looks_logged_in(p):
+    """이 페이지가 로그인된 상태로 보이는지 판정"""
+    try:
+        u = (p.url or '').lower()
+    except Exception:
+        return False
+    if not u or u == 'about:blank' or u.startswith('chrome'):
+        return False
+    if any(ind in u for ind in LOGIN_INDICATORS):
+        return False
+    return ('salesforce.com' in u or 'force.com' in u)
+
+
+def find_logged_in_page(context, fallback=None):
+    """컨텍스트의 모든 페이지를 검사해서 로그인된 페이지 반환.
+    여러 탭이 있어도 어느 하나가 로그인되어 있으면 그 페이지 사용."""
+    for p in context.pages:
+        if _page_looks_logged_in(p):
+            return p
+    return fallback
+
+
+def manual_login(context, page):
+    """returns: (success: bool, active_page: Page) — active_page 는 로그인된 페이지"""
     print("브라우저를 Salesforce 로그인 페이지로 이동합니다...")
     page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
 
@@ -68,50 +97,39 @@ def manual_login(page):
         print("🤖 [AUTO 모드] 세션 유효성 확인 중...")
         time.sleep(4)
 
-        def is_logged_in():
-            """로그인되지 않은 URL 패턴들을 제외 — 그 외는 로그인된 것으로 간주"""
-            u = (page.url or '').lower()
-            if not u or u == 'about:blank' or u.startswith('chrome'):
-                return False
-            # 로그인 진행 중인 URL 패턴
-            login_indicators = [
-                'login.salesforce.com',
-                '/login',
-                '/checkpoint',
-                '/authcomplete',
-                '/secur/',
-                'ec=302',           # SSO 리다이렉트 진행중 (?ec=302&startURL=...)
-                'starturl=',        # SSO startURL 파라미터
-                'frontdoor.jsp',    # SSO 전환 페이지
-            ]
-            if any(p in u for p in login_indicators):
-                return False
-            # Salesforce 도메인 안이고 위 패턴 없으면 로그인됨
-            return ('salesforce.com' in u or 'force.com' in u)
+        # 모든 탭 검사 — 어느 하나가 로그인되어 있으면 OK
+        logged_page = find_logged_in_page(context, fallback=page)
+        if _page_looks_logged_in(logged_page):
+            print(f"✓ 기존 세션 유효 — 자동 로그인됨 (URL: {logged_page.url[:80]})")
+            return True, logged_page
 
-        if is_logged_in():
-            print(f"✓ 기존 세션 유효 — 자동 로그인됨 (URL: {page.url[:80]})")
-            return True
-
-        # 세션 만료 — 사용자에게 직접 로그인 기회 제공
+        # 세션 만료 — 사용자 로그인 대기
         print("=" * 60)
         print("⚠ 세션 만료 감지 — 브라우저에서 직접 로그인해주세요")
         print(f"   현재 URL: {page.url[:100]}")
         print("⏳ 최대 120초까지 기다립니다. 로그인 완료되면 자동 진행됩니다.")
         print("=" * 60)
-        for i in range(60):  # 60 * 2초 = 최대 120초
-            time.sleep(2)
-            if is_logged_in():
-                print(f"✓ 로그인 감지됨 ({(i+1)*2}초 만에) — 자동 진행 시작")
-                print(f"   현재 URL: {page.url[:100]}")
-                time.sleep(2)  # 안정화
-                return True
-            if (i + 1) % 5 == 0:
-                # 5초마다 현재 URL 도 함께 로그 (어떤 페이지에 있는지 디버깅용)
-                print(f"  ... 대기 중 ({(i+1)*2}초) — URL: {page.url[:90]}")
 
-        print(f"✗ 120초 안에 로그인 완료되지 않음 — 종료 (마지막 URL: {page.url[:80]})")
-        return False
+        for i in range(60):  # 최대 120초
+            time.sleep(2)
+            logged_page = find_logged_in_page(context)
+            if logged_page:
+                print(f"✓ 로그인 감지됨 ({(i+1)*2}초 만에)")
+                print(f"   활성 페이지 URL: {logged_page.url[:100]}")
+                # 만약 다른 탭에서 로그인했으면 그 탭으로 전환
+                try:
+                    logged_page.bring_to_front()
+                except Exception:
+                    pass
+                time.sleep(2)  # 안정화
+                return True, logged_page
+            if (i + 1) % 5 == 0:
+                # 5초마다 모든 탭 URL 출력 (디버깅)
+                all_urls = [p.url[:60] for p in context.pages]
+                print(f"  ... 대기 중 ({(i+1)*2}초) — 탭 {len(all_urls)}개: {all_urls}")
+
+        print(f"✗ 120초 안에 로그인 완료되지 않음 — 종료")
+        return False, page
 
     print("\n" + "▼" * 60)
     print("  👤 브라우저에서 직접 로그인해주세요.")
@@ -119,7 +137,8 @@ def manual_login(page):
     print("  아래에서 Enter 키를 누르세요.")
     print("▲" * 60)
     input("\n  ➤ 로그인 완료 후 Enter 키 입력: ")
-    return True
+    # Enter 후에도 활성 페이지 검사해서 반환
+    return True, find_logged_in_page(context, fallback=page)
 
 
 # ──── Salesforce 리다이렉트 대응 안전한 navigation ────────
@@ -456,12 +475,14 @@ def main():
         page = context.pages[0] if context.pages else context.new_page()
 
         # 1. 로그인 페이지 → 사용자 대기 (AUTO 모드는 세션 유효성 체크만)
-        login_ok = manual_login(page)
+        login_ok, active_page = manual_login(context, page)
         if not login_ok:
             print("\n❌ 로그인 실패로 종료합니다.")
             print("💡 해결법: automation/run.bat 을 1회 수동 실행해서 로그인 → 다시 시도")
             context.close()
             sys.exit(2)  # 로그인 실패 = exit code 2 (웹앱에서 '오류'로 인식)
+        # 활성 페이지를 page 로 사용 (다른 탭에서 로그인했을 수 있음)
+        page = active_page
 
         # persistent context 는 자동으로 user_data_dir 에 세션 저장됨
         print(f"  💾 다음 실행 시 자동 로그인 됩니다 (세션 유지)")
