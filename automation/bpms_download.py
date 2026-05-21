@@ -132,8 +132,8 @@ def download_report(page, name, url, attempt=1):
         print(f"     ✓ 준비 완료 ({elapsed:.1f}초)")
     except PWTimeout:
         print(f"     ⚠ 편집 버튼 미발견 — 그래도 진행")
-    # 마지막 안정화 짧은 대기
-    time.sleep(1.5)
+    # 마지막 안정화 대기 — 보고서 사이즈에 따라 다소 차이
+    time.sleep(2.5)
 
     # ── 1. 편집 옆 ▼ 메뉴 열기 (Lightning Shadow DOM/iframe 대응)
     print("  🔽 [편집 옆 ▼] 메뉴 열기...")
@@ -162,23 +162,26 @@ def download_report(page, name, url, attempt=1):
                 if not btn.is_visible(timeout=1500):
                     continue
                 btn.click(timeout=4000)
-                time.sleep(1)
+
+                # ⭐ 메뉴 애니메이션·렌더링 대기 (충분히 길게 — 3초)
+                print(f"     ⏳ 메뉴 펼쳐짐 대기 (3초)... (aria-label: \"{aria_name}\")")
+                time.sleep(3)
 
                 # 검증: "내보내기" 메뉴 아이템 보이면 정상
                 export_item = frame.get_by_role('menuitem', name='내보내기').first
                 if export_item.count() == 0:
-                    # 다른 매칭 방법으로도 확인
                     export_item = frame.get_by_text('내보내기', exact=True).first
-                if export_item.count() > 0 and export_item.is_visible(timeout=2000):
+                if export_item.count() > 0 and export_item.is_visible(timeout=3000):
                     chevron_clicked = True
-                    print(f"     ✓ 메뉴 열림 (aria-label: \"{aria_name}\")")
+                    print(f"     ✓ 메뉴 열림 확인")
                     # 내보내기 클릭
                     print("  📤 '내보내기' 메뉴 클릭...")
                     export_item.click(timeout=5000)
                     break
                 else:
+                    # 이 메뉴가 아니었음 — ESC로 닫고 다음 후보
                     page.keyboard.press('Escape')
-                    time.sleep(0.4)
+                    time.sleep(0.8)
             except Exception:
                 continue
 
@@ -186,18 +189,17 @@ def download_report(page, name, url, attempt=1):
     if not chevron_clicked:
         try:
             print("     ↻ 폴백: 편집 텍스트 기반 매칭...")
-            # 편집 버튼을 찾고 → 그 부모 컨테이너 안에서 다른 button을 시도
             edit_btn = page.get_by_role('button', name='편집').first
             if edit_btn.count() > 0:
-                # 편집 버튼의 가까운 lightning-button-menu 트리거
                 container = edit_btn.locator('xpath=ancestor::*[contains(@class, "slds-button-group") or contains(@class, "button-group") or self::lightning-button-group][1]')
                 if container.count() > 0:
                     menu_btn = container.locator('button[aria-haspopup]').last
                     if menu_btn.count() > 0:
                         menu_btn.click(timeout=4000)
-                        time.sleep(1)
+                        # ⭐ 메뉴 펼쳐짐 대기 3초
+                        time.sleep(3)
                         export_item = page.get_by_role('menuitem', name='내보내기').first
-                        if export_item.count() > 0 and export_item.is_visible(timeout=2000):
+                        if export_item.count() > 0 and export_item.is_visible(timeout=3000):
                             chevron_clicked = True
                             print(f"     ✓ 폴백 성공")
                             print("  📤 '내보내기' 메뉴 클릭...")
