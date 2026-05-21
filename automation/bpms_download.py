@@ -121,77 +121,89 @@ def download_report(page, name, url, attempt=1):
         pass
     time.sleep(5)
 
-    # ── 1. 편집 버튼 옆 ▼ 메뉴 열기 (정확하게 — 프로필 메뉴 X)
+    # ── 1. 편집 옆 ▼ 메뉴 열기 (Lightning Shadow DOM/iframe 대응)
     print("  🔽 [편집 옆 ▼] 메뉴 열기...")
     chevron_clicked = False
 
-    # Salesforce Lightning report 페이지의 액션 컨테이너 안에서만 메뉴 찾기
-    # XPath: 편집 버튼 → 형제/근접한 lightning-button-menu
-    candidate_selectors = [
-        # 가장 정확: 편집 버튼 직후의 lightning-button-menu의 트리거 버튼
-        ('xpath', '//button[normalize-space(.)="편집"]/following::lightning-button-menu[1]//button'),
-        ('xpath', '//*[normalize-space(.)="편집" and self::button]/parent::*/following-sibling::*[1]//button[@aria-haspopup="menu"]'),
-        # lightning-button-group 안에서 편집과 형제인 메뉴 트리거
-        ('xpath', '//button[normalize-space(.)="편집"]/ancestor::lightning-button-group//button[@aria-haspopup="menu"]'),
-        # 폴백: 보고서 페이지 본문 안의 메뉴 트리거 (사이드바·프로필 제외)
-        ('css', 'div.reportPlatformLanding lightning-button-menu button'),
-        ('css', '[class*="reportActions"] lightning-button-menu button'),
+    # 가능한 메뉴 버튼 aria-label 후보 (Salesforce는 한국어/영어 혼재 가능)
+    MENU_ARIA_NAMES = [
+        '기타 작업 표시', '더 많은 옵션', '추가 작업 표시', '추가 작업',
+        '다른 옵션 표시', '더보기', '추가 옵션',
+        'Show More Actions', 'More actions', 'Show more actions',
+        'More options', 'More', 'Show actions',
     ]
 
-    for kind, sel in candidate_selectors:
-        try:
-            loc = page.locator(sel if kind == 'css' else f'xpath={sel}').first
-            if loc.count() == 0:
-                continue
-            if not loc.is_visible(timeout=2000):
-                continue
-            loc.click(timeout=5000)
-            time.sleep(0.8)
+    # iframe까지 모두 탐색
+    frames_to_try = [page] + [f for f in page.frames if f != page.main_frame]
 
-            # ⭐ 클릭 후 검증: '내보내기' 메뉴 아이템이 보여야 정상
-            # 안 보이면 잘못된 메뉴 (프로필 등) 열린 것 — ESC로 닫고 다음 시도
-            if page.locator('text=내보내기').first.is_visible(timeout=2000):
-                chevron_clicked = True
-                print(f"     ✓ 보고서 액션 메뉴 열림")
-                break
-            else:
-                print(f"     ⚠ 다른 메뉴가 열렸음 (내보내기 안 보임) — ESC 후 재시도")
-                page.keyboard.press('Escape')
-                time.sleep(0.5)
-        except Exception:
-            continue
+    for frame in frames_to_try:
+        if chevron_clicked:
+            break
+        for aria_name in MENU_ARIA_NAMES:
+            try:
+                # get_by_role: Shadow DOM 통과 가능
+                btn = frame.get_by_role('button', name=aria_name).first
+                if btn.count() == 0:
+                    continue
+                if not btn.is_visible(timeout=1500):
+                    continue
+                btn.click(timeout=4000)
+                time.sleep(1)
 
+                # 검증: "내보내기" 메뉴 아이템 보이면 정상
+                export_item = frame.get_by_role('menuitem', name='내보내기').first
+                if export_item.count() == 0:
+                    # 다른 매칭 방법으로도 확인
+                    export_item = frame.get_by_text('내보내기', exact=True).first
+                if export_item.count() > 0 and export_item.is_visible(timeout=2000):
+                    chevron_clicked = True
+                    print(f"     ✓ 메뉴 열림 (aria-label: \"{aria_name}\")")
+                    # 내보내기 클릭
+                    print("  📤 '내보내기' 메뉴 클릭...")
+                    export_item.click(timeout=5000)
+                    break
+                else:
+                    page.keyboard.press('Escape')
+                    time.sleep(0.4)
+            except Exception:
+                continue
+
+    # 폴백 1: 편집 텍스트 옆의 menu 버튼을 텍스트 기반으로 찾기
     if not chevron_clicked:
+        try:
+            print("     ↻ 폴백: 편집 텍스트 기반 매칭...")
+            # 편집 버튼을 찾고 → 그 부모 컨테이너 안에서 다른 button을 시도
+            edit_btn = page.get_by_role('button', name='편집').first
+            if edit_btn.count() > 0:
+                # 편집 버튼의 가까운 lightning-button-menu 트리거
+                container = edit_btn.locator('xpath=ancestor::*[contains(@class, "slds-button-group") or contains(@class, "button-group") or self::lightning-button-group][1]')
+                if container.count() > 0:
+                    menu_btn = container.locator('button[aria-haspopup]').last
+                    if menu_btn.count() > 0:
+                        menu_btn.click(timeout=4000)
+                        time.sleep(1)
+                        export_item = page.get_by_role('menuitem', name='내보내기').first
+                        if export_item.count() > 0 and export_item.is_visible(timeout=2000):
+                            chevron_clicked = True
+                            print(f"     ✓ 폴백 성공")
+                            print("  📤 '내보내기' 메뉴 클릭...")
+                            export_item.click(timeout=5000)
+        except Exception:
+            pass
+
+    # 모두 실패 → 디버그 스크린샷 + 사용자 수동 안내
+    if not chevron_clicked:
+        debug_path = SCRIPT_DIR / f"debug_{safe_filename(name)}_{int(time.time())}.png"
+        try:
+            page.screenshot(path=str(debug_path), full_page=False)
+            print(f"  🖼 디버그 스크린샷 저장: {debug_path.name}")
+        except Exception:
+            pass
         print("  ⚠ 자동으로 메뉴를 못 찾았습니다. 브라우저에서 직접:")
         print("     1) 우측 상단 '편집' 옆 ▼ 클릭")
         print("     2) '내보내기' 클릭")
         print("     3) 팝업에서 '내보내기' 클릭")
         input("     완료 후 Enter (다음 보고서로 넘어감)... ")
-        return None
-
-    # ── 2. "내보내기" 메뉴 아이템 클릭
-    print("  📤 '내보내기' 메뉴 클릭...")
-    try:
-        export_clicked = False
-        # 메뉴 안의 '내보내기' (role=menuitem 우선)
-        for sel in [
-            '[role="menuitem"]:has-text("내보내기")',
-            'lightning-menu-item:has-text("내보내기")',
-            'a[role="menuitem"]:has-text("내보내기")',
-            '//div[@role="menu"]//*[normalize-space(.)="내보내기"]',
-        ]:
-            try:
-                loc = (page.locator(f'xpath={sel}') if sel.startswith('//') else page.locator(sel)).first
-                if loc.count() > 0 and loc.is_visible(timeout=2000):
-                    loc.click(timeout=5000)
-                    export_clicked = True
-                    break
-            except Exception:
-                continue
-        if not export_clicked:
-            raise Exception("'내보내기' 메뉴 아이템을 찾지 못함")
-    except Exception as e:
-        print(f"  ✗ 실패: {e}")
         return None
 
     time.sleep(2)
@@ -243,15 +255,15 @@ def main():
     print(f"📋 다운로드 대상: {len(REPORTS)}개 보고서뷰")
 
     with sync_playwright() as p:
-        # ⚠ launch_persistent_context 사용 — user_data_dir를 ASCII 경로로 명시
-        # (한글 임시 폴더에서 spawn UNKNOWN 에러 회피)
+        # ⚠ launch_persistent_context — ASCII 경로 사용 (한글 spawn 에러 회피)
+        # no_viewport=True + --start-maximized = 사용자가 직접 켠 브라우저와 동일한 풀스크린
         print(f"  💾 브라우저 데이터 폴더: {USER_DATA_DIR}")
         context = p.chromium.launch_persistent_context(
             user_data_dir=USER_DATA_DIR,
             headless=False,
             accept_downloads=True,
             locale="ko-KR",
-            viewport={"width": 1600, "height": 900},
+            no_viewport=True,           # 윈도우 크기 그대로 = 풀스크린
             args=["--start-maximized"],
         )
         page = context.pages[0] if context.pages else context.new_page()
