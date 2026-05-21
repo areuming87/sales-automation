@@ -7,9 +7,9 @@ set PLAYWRIGHT_BROWSERS_PATH=C:\playwright_browsers
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
 
-REM Clean up any orphan process holding port 8765
+REM Clean up orphan process on port 8765 (avoid parens in echo - they break for-loop)
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8765" ^| findstr "LISTENING"') do (
-    echo Found orphan process on port 8765 (PID %%a). Killing...
+    echo Killing orphan process PID %%a on port 8765...
     taskkill /F /PID %%a > nul 2>&1
 )
 
