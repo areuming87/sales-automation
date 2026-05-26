@@ -163,16 +163,17 @@ def find_pdfs_in_pjt(pjt: str) -> dict:
     if not pjt_dir.exists():
         return result
 
-    # 재귀적으로 모든 PDF 찾기 (단, _zips 폴더는 제외)
+    # 재귀적으로 모든 PDF 찾기 (단, _zips / _original_scan 폴더는 제외)
     for pdf in pjt_dir.rglob("*.pdf"):
-        if "_zips" in pdf.parts:
+        if "_zips" in pdf.parts or "_original_scan" in pdf.parts:
             continue
         name = pdf.name
-        # 사업자등록증 매칭
-        if "사업자등록증" in name:
+        # 사업자등록증 / 고유번호증 매칭 (둘 다 business 로)
+        # "기타서류_..._고유번호증.pdf" 같은 파일명도 인식
+        if "사업자등록증" in name or "고유번호증" in name:
             result["business"].append(pdf)
-        # 현장실사 확인서 매칭 (공백 유무 모두)
-        elif re.search(r"현장실사\s*확인서", name):
+        # 현장실사 확인서 매칭 (공백 유무 모두, "사전컨설팅" 도 포함)
+        elif re.search(r"현장실사\s*확인서|사전\s*컨설팅", name):
             result["inspection"].append(pdf)
 
     return result
@@ -203,6 +204,19 @@ def _clean(value: str) -> str:
 def _normalize_korean_name(name: str) -> str:
     """'남 문 호' → '남문호' (자모 사이 공백 제거)"""
     return re.sub(r"\s+", "", name).strip()
+
+
+def _normalize_korean_spacing(text: str) -> str:
+    """OCR 의 자모 분리 띄어쓰기 정상화
+       '장 유 덕 산 아 내' → '장유덕산아내'
+       3글자 이상 연속으로 한 글자씩 띄어진 패턴만 압축 (정상 띄어쓰기 보존)"""
+    if not text:
+        return text
+    return re.sub(
+        r"([가-힣])(?:\s+([가-힣])){2,}",
+        lambda m: re.sub(r"\s+", "", m.group(0)),
+        text
+    )
 
 
 # 잘못 추출되는 대표자 후보들 (OCR 면책문구·헤더 등에서 오인식)
@@ -267,6 +281,9 @@ def extract_business(text: str, filename: str = "") -> dict:
             val = _clean(m.group(1))
             val = re.sub(r"\s*(?:법인명|성\s*명|대\s*표\s*자|생\s*년\s*월\s*일|개\s*업\s*일|소\s*재\s*지).*$", "", val).strip()
             val = re.sub(r"[\|｜\"'\\/]+$", "", val).strip()
+            # ⭐ OCR 자모 띄어쓰기 정상화 — "장 유 덕 산..." → "장유덕산..."
+            val = _normalize_korean_spacing(val)
+            val = re.sub(r"\s+", " ", val).strip()  # 다중 공백 → 단일 공백
             korean_chars = re.findall(r"[가-힣]", val)
             if val and len(val) >= 3 and len(korean_chars) >= 2:
                 out["org_name"] = val
