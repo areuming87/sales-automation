@@ -3956,6 +3956,20 @@ async function handlePdfExtract() {
     return;
   }
 
+  // 이미 추출 값 있는 PJT 있는지 확인 → 덮어쓰기 여부 묻기
+  const haveValuesCount = pjts.filter(p => {
+    const item = SAMPLE.find(s => normalizePjt(s.pjt) === normalizePjt(p));
+    return item && (item.org_name || item.org_rep || item.org_biz_no);
+  }).length;
+  let forceOverwrite = false;
+  if (haveValuesCount > 0) {
+    forceOverwrite = confirm(
+      `이미 PDF 추출값이 있는 PJT 가 ${haveValuesCount}건 있습니다.\n\n` +
+      `[확인] = 새 PDF 분석 결과로 덮어쓰기 (OCR 재처리한 경우)\n` +
+      `[취소] = 기존 값 유지 (영업정보 데이터 보존)`
+    );
+  }
+
   // 모달 준비
   document.getElementById('bpmsModalTitle').textContent = `🔍 PDF 분석 (${pjts.length}건)`;
   document.getElementById('bpmsModalSub').textContent   = `현장실사 확인서 / 사업자등록증에서 5개 필드 추출`;
@@ -4042,16 +4056,28 @@ async function handlePdfExtract() {
         const resEl = document.getElementById('bpmsResult');
         if (data.status === 'done' && summary) {
           // ⭐ 추출된 필드를 SAMPLE 에 머지 + 상태 갱신
-          // 규칙: org_name / org_rep 은 영업정보 우선 — 이미 값 있으면 PDF 결과로 덮어쓰지 않음
-          const NO_OVERWRITE_IF_FILLED = new Set(['org_name', 'org_rep', 'org_biz_no']);
+          // 규칙: org_name/org_rep/org_biz_no 은 영업정보 우선 — forceOverwrite=true 면 덮어씀
+          const NO_OVERWRITE_IF_FILLED = forceOverwrite
+            ? new Set()
+            : new Set(['org_name', 'org_rep', 'org_biz_no']);
           let updatedCnt = 0;
           (summary.results || []).forEach(r => {
             const item = SAMPLE.find(s => normalizePjt(s.pjt) === normalizePjt(r.pjt));
             if (!item) return;
             let changed = false;
+            // ⭐ forceOverwrite 면 빈 값으로라도 초기화 (이전 잘못된 값 제거)
+            if (forceOverwrite) {
+              ['org_name', 'org_rep', 'org_biz_no'].forEach(k => {
+                if (item[k] && !r.extracted[k]) {
+                  // PDF 에서 추출 못 한 경우 → 이전 값 유지 X (잘못된 값일 가능성)
+                  // 단, OCR 변환 안 한 경우엔 추출 못할 수도 있으니 신중히
+                  // → 일단 안 지우고 새 값만 들어옴 (안전)
+                }
+              });
+            }
             Object.entries(r.extracted || {}).forEach(([k, v]) => {
               if (!v || k.startsWith('_')) return;  // 메타 필드 제외
-              if (NO_OVERWRITE_IF_FILLED.has(k) && item[k]) return;  // 영업정보 우선
+              if (NO_OVERWRITE_IF_FILLED.has(k) && item[k]) return;  // 영업정보 우선 (forceOverwrite=false 일 때만)
               if (item[k] !== v) { item[k] = v; changed = true; }
             });
             if (changed) {
