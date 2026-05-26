@@ -28,10 +28,22 @@ os.makedirs(USER_DATA_DIR, exist_ok=True)
 
 # ──── 설정 ────────────────────────────────────────────────
 LOGIN_URL = "https://gschargev.lightning.force.com/lightning/page/home"
-# 다운로드 후 자동 업로드할 웹앱 URL (GitHub Pages 배포본)
-WEBAPP_URL = "https://areuming87.github.io/sales-automation/bpms.html"
-# 로컬 테스트하려면 위 줄 주석 처리하고 아래 사용:
-# WEBAPP_URL = f"file:///{(Path(__file__).parent.parent / 'bpms.html').as_posix()}"
+# 다운로드 후 자동 업로드할 웹앱 URL
+# ⭐ bpms.html 자동 탐지 — NAS webapp/ 우선, 없으면 로컬 상위 폴더
+def _find_bpms_html():
+    candidates = [
+        Path(__file__).parent.parent / 'webapp' / 'bpms.html',  # NAS 구조 (5명 공유)
+        Path(__file__).parent.parent / 'bpms.html',              # 로컬 개발 구조
+    ]
+    for p in candidates:
+        try:
+            if p.exists():
+                return p.resolve().as_uri()
+        except Exception:
+            continue
+    raise RuntimeError("bpms.html 을 찾을 수 없습니다")
+
+WEBAPP_URL = _find_bpms_html()
 
 SCRIPT_DIR = Path(__file__).parent
 DOWNLOAD_DIR = SCRIPT_DIR / "downloads"

@@ -595,10 +595,11 @@
       padding: 3px 9px; border-radius: 20px;
       white-space: nowrap;
     }
-    .reg-status.ready   { background: #dcfce7; color: #15803d; }
-    .reg-status.review  { background: #fef3c7; color: #92400e; }
-    .reg-status.pending { background: var(--gray-100); color: var(--gray-500); }
-    .reg-status.done    { background: #dbeafe; color: #1e40af; }
+    .reg-status.ready    { background: #dcfce7; color: #15803d; }
+    .reg-status.attached { background: #fce7f3; color: #9d174d; }
+    .reg-status.review   { background: #fef3c7; color: #92400e; }
+    .reg-status.pending  { background: var(--gray-100); color: var(--gray-500); }
+    .reg-status.done     { background: #dbeafe; color: #1e40af; }
 
     /* 버튼 그룹 구분선 */
     .action-sep { width: 1px; height: 22px; background: var(--gray-200); margin: 0 4px; flex-shrink: 0; }
@@ -1026,6 +1027,7 @@
           <select id="f_reg_status" onchange="onFilterChange()">
             <option value="">전체</option>
             <option value="ready">✅ 등록 준비 완료</option>
+            <option value="attached">📥 첨부 받음</option>
             <option value="review">⚠ 검수 필요</option>
             <option value="pending">⬜ 미처리</option>
             <option value="done">🌐 등록 완료</option>
@@ -1073,11 +1075,26 @@
       <button class="btn-pink btn-bpms-dl" onclick="handleBpmsFileDownload()">
         📥 BPMS 첨부파일 다운로드
       </button>
+      <button class="btn-pink btn-pdf" onclick="handlePdfExtract()">
+        🔍 PDF 분석
+      </button>
       <button class="btn-pink btn-nuriji" onclick="handleNurijiRegister()">
         🌐 누리집 등록
       </button>
 
-      <div class="result-meta" id="resultMeta">전체 <strong id="totalCount" style="color:var(--gray-800);">0</strong>건 / 조회 <span id="resultCount">0</span>건</div>
+      <div class="result-meta" id="resultMeta">
+        전체 <strong id="totalCount" style="color:var(--gray-800);">0</strong>건
+        / 조회 <span id="resultCount">0</span>건
+        <span style="margin-left:14px;padding-left:14px;border-left:1px solid var(--gray-300);">
+          🏢 충전소 <strong id="sumStations" style="color:var(--primary);">0</strong>개
+        </span>
+        <span style="margin-left:10px;">
+          ⚡ 충전기 <strong id="sumChargers" style="color:var(--primary);">0</strong>대
+          <span style="font-weight:400;color:var(--gray-500);font-size:11px;">
+            (완속 <span id="sumSlow">0</span> + 급속 <span id="sumFast">0</span>)
+          </span>
+        </span>
+      </div>
     </div>
   </div>
 
@@ -1347,9 +1364,148 @@ function dedupeSample(options = {}) {
   }
   return removed;
 }
-function saveBpmsData() {
+function saveBpmsData(cleanupMaster = false) {
   try { localStorage.setItem(BPMS_DATA_KEY, JSON.stringify(SAMPLE)); }
   catch (e) { console.error('데이터 저장 실패:', e); }
+  // 백엔드에도 비동기 push (실패해도 로컬은 살아있음)
+  // cleanupMaster=true → 서버에서도 SAMPLE 에 없는 PJT 자동 삭제 (영업정보 마스터 정리)
+  apiPushProjects(SAMPLE, cleanupMaster).catch(() => {});
+}
+
+/* ───────────────────────────────────────────────
+   🌐 백엔드 API 연결 (FastAPI on 서버 PC)
+   - API 살아있으면 5명 공유 DB 사용
+   - 죽어있으면 자동으로 localStorage Fallback
+─────────────────────────────────────────────── */
+// API_BASE 자동 감지 — localhost 부터 후보 IP 까지 차례로 ping
+// (본인 PC = localhost 잡음, 팀원 PC = LAN IP 잡음)
+const API_CANDIDATES = [
+  'http://localhost:8000',
+  'http://192.168.200.124:8000',
+  'http://192.168.200.125:8000',  // 백업 후보
+];
+let API_BASE   = API_CANDIDATES[0];  // 살아있는 거 잡히면 갱신됨
+let API_ONLINE = false;
+let API_LAST_PUSH = 0;
+
+async function apiPing() {
+  for (const base of API_CANDIDATES) {
+    try {
+      const r = await fetch(`${base}/health`, { cache: 'no-store' });
+      if (r.ok) {
+        API_BASE = base;
+        API_ONLINE = true;
+        updateApiBadge();
+        console.log('[API] 연결됨:', base);
+        return true;
+      }
+    } catch {}
+  }
+  API_ONLINE = false;
+  updateApiBadge();
+  return false;
+}
+
+async function apiFetchProjects() {
+  try {
+    const r = await fetch(`${API_BASE}/api/pjt/`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    API_ONLINE = true; updateApiBadge();
+    return Array.isArray(d.items) ? d.items : [];
+  } catch (e) {
+    API_ONLINE = false; updateApiBadge();
+    return null;  // null = 실패 (빈 배열과 구분)
+  }
+}
+
+async function apiPushProjects(items, cleanupMaster = false) {
+  if (!items || items.length === 0) return null;
+  try {
+    const r = await fetch(`${API_BASE}/api/pjt/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items, cleanup_master: cleanupMaster })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    API_ONLINE = true; API_LAST_PUSH = Date.now(); updateApiBadge();
+    return await r.json();
+  } catch (e) {
+    API_ONLINE = false; updateApiBadge();
+    return null;
+  }
+}
+
+async function apiDeleteAll() {
+  try {
+    const r = await fetch(`${API_BASE}/api/pjt/?confirm=DELETE_ALL`, { method: 'DELETE' });
+    return r.ok;
+  } catch { return false; }
+}
+
+async function apiFetchMappings() {
+  try {
+    const r = await fetch(`${API_BASE}/api/mappings/`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } catch { return null; }
+}
+
+async function apiPushMapping(excel_header, db_field) {
+  try {
+    await fetch(`${API_BASE}/api/mappings/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ excel_header, db_field })
+    });
+  } catch {}
+}
+
+/* 우측 상단 API 연결 상태 배지 */
+function updateApiBadge() {
+  let b = document.getElementById('apiBadge');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'apiBadge';
+    b.style.cssText = 'position:fixed;top:8px;right:12px;z-index:99999;font-size:11px;padding:4px 10px;border-radius:12px;font-family:system-ui;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.15);user-select:none;cursor:default;';
+    document.body && document.body.appendChild(b);
+  }
+  if (API_ONLINE) {
+    b.style.background = '#d1fae5'; b.style.color = '#065f46';
+    b.textContent = '● 서버 연결됨 (5명 공유)';
+    b.title = `API: ${API_BASE}\n마지막 동기화: ${API_LAST_PUSH ? new Date(API_LAST_PUSH).toLocaleTimeString() : '없음'}`;
+  } else {
+    b.style.background = '#fee2e2'; b.style.color = '#991b1b';
+    b.textContent = '● 오프라인 (로컬만)';
+    b.title = `백엔드 미연결: ${API_BASE}\nstart.bat 이 켜져 있는지 확인하세요.`;
+  }
+}
+
+/* 초기 동기화 — 서버 데이터를 가져와서 로컬과 머지 (서버 우선) */
+async function initApiSync() {
+  const ok = await apiPing();
+  if (!ok) {
+    console.warn('[API] 백엔드 미연결 — localStorage 모드로 작동');
+    return;
+  }
+  const remote = await apiFetchProjects();
+  if (remote === null) return;
+  if (remote.length === 0 && SAMPLE.length > 0) {
+    // 서버 비어있고 로컬 데이터 있음 → 로컬을 서버로 푸시 (최초 1회)
+    console.log('[API] 서버 비어있음 — 로컬 데이터 ' + SAMPLE.length + '건 푸시');
+    await apiPushProjects(SAMPLE);
+    return;
+  }
+  if (remote.length > 0) {
+    // 서버 우선 (5명이 공유하므로 서버가 진실)
+    console.log('[API] 서버에서 ' + remote.length + '건 받아옴 → 로컬 교체');
+    SAMPLE.length = 0;
+    SAMPLE.push(...remote);
+    try { localStorage.setItem(BPMS_DATA_KEY, JSON.stringify(SAMPLE)); } catch {}
+    // 화면 갱신 (handleSearch가 존재할 때만)
+    if (typeof populateFilterOptions === 'function') populateFilterOptions();
+    if (typeof handleSearch === 'function') handleSearch();
+  }
 }
 
 /* 자동 상태 동기화: 대기번호가 있으면 무조건 '등록 완료' */
@@ -1445,11 +1601,14 @@ if (_dedupedAtLoad.length > 0) {
 /* 전체 데이터 삭제 */
 function clearAllData() {
   if (SAMPLE.length === 0) { showToast('삭제할 데이터가 없습니다.'); return; }
-  if (!confirm(`정말 모든 데이터 ${SAMPLE.length}건을 삭제하시겠습니까?\n(되돌릴 수 없습니다)`)) return;
+  if (!confirm(`정말 모든 데이터 ${SAMPLE.length}건을 삭제하시겠습니까?\n(되돌릴 수 없습니다)\n\n⚠ 5명 공유 서버 데이터도 함께 삭제됩니다.`)) return;
   SAMPLE.length = 0;
   saveBpmsData();
+  // 서버도 비우기 (saveBpmsData 의 bulk 는 빈 배열이면 푸시 안하므로 별도 호출)
+  apiDeleteAll().catch(() => {});
   filteredData = [];
   document.getElementById('resultCount').textContent = '0';
+  updateSummaryStats();
   document.getElementById('totalCount').textContent = '0';
   document.getElementById('tableBody').innerHTML = `
     <tr id="emptyRow">
@@ -1470,11 +1629,32 @@ function updateTotalCount() {
   if (el) el.textContent = SAMPLE.length;
 }
 
+/* 조회된 데이터 기준 합계 (충전소 개수 + 충전기 수량) */
+function updateSummaryStats() {
+  const data = (typeof filteredData !== 'undefined' && Array.isArray(filteredData))
+    ? filteredData : [];
+  let slow = 0, fast = 0;
+  data.forEach(r => {
+    slow += parseInt(r.qty_slow) || 0;
+    fast += parseInt(r.qty_fast) || 0;
+  });
+  const total = slow + fast;
+  const setText = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = v.toLocaleString();
+  };
+  setText('sumStations', data.length);
+  setText('sumChargers', total);
+  setText('sumSlow', slow);
+  setText('sumFast', fast);
+}
+
 const REG_STATUS_MAP = {
-  'ready':   { label: '✅ 등록 준비 완료', cls: 'ready' },
-  'review':  { label: '⚠ 검수 필요',      cls: 'review' },
-  'pending': { label: '⬜ 미처리',          cls: 'pending' },
-  'done':    { label: '🌐 등록 완료',      cls: 'done' },
+  'ready':    { label: '✅ 등록 준비 완료', cls: 'ready' },
+  'attached': { label: '📥 첨부 받음',      cls: 'attached' },
+  'review':   { label: '⚠ 검수 필요',       cls: 'review' },
+  'pending':  { label: '⬜ 미처리',          cls: 'pending' },
+  'done':     { label: '🌐 등록 완료',       cls: 'done' },
 };
 
 /* 사업구분1 → 사업구분1-상세 매핑
@@ -1718,6 +1898,7 @@ function handleSearch() {
     renderTable();
     document.getElementById('resultCount').textContent = filteredData.length;
     updateTotalCount();
+    updateSummaryStats();
     // 검색 실행됨 — 상태 저장 (페이지 다시 들어올 때 자동 재검색)
     saveFilterState(true);
     showToast(`🔍 ${filteredData.length}건 조회되었습니다. (전체 ${SAMPLE.length}건 중)`);
@@ -1939,6 +2120,7 @@ function resetFilters() {
   document.getElementById('f_biz1d').innerHTML = '<option value="">전체</option>';
   filteredData = [];
   document.getElementById('resultCount').textContent = '0';
+  updateSummaryStats();
   document.getElementById('tableBody').innerHTML = `
     <tr id="emptyRow">
       <td colspan="18" style="padding:0;border:none;">
@@ -1983,6 +2165,21 @@ const XLS_COL_MAP = {
   '시공사':'partner',
   '고객사':'partner', '고객사이름':'partner', '고객사 이름':'partner', '고객사명':'partner',
   '파트너사':'partner', '파트너 사':'partner', '협력사':'partner',
+
+  // ── 기관 대표자 (사업자등록증 PDF 대체용) ──────
+  '기관대표자':'org_rep', '기관 대표자':'org_rep',
+  '대표자':'org_rep', '대표자명':'org_rep', '대표자 명':'org_rep',
+
+  // ── 사업자번호 (사업자등록증 PDF 대체용) ───────
+  '사업자번호':'org_biz_no', '사업자 번호':'org_biz_no',
+  '사업자등록번호':'org_biz_no', '사업자 등록번호':'org_biz_no', '사업자 등록 번호':'org_biz_no',
+  '기관사업자번호':'org_biz_no', '기관 사업자번호':'org_biz_no',
+  '기관 사업자번호(대표자생년월일)':'org_biz_no',
+
+  // ── 사무실 연락처 ────────────────────────────
+  '사무실연락처':'office_phone', '사무실 연락처':'office_phone',
+  '대표연락처':'office_phone', '대표 연락처':'office_phone',
+  '기관연락처':'office_phone', '기관 연락처':'office_phone',
 
   // ── 사업구분 ─────────────────────────────────
   '사업구분1':'biz1', '사업구분 1':'biz1',
@@ -2106,7 +2303,28 @@ let USER_COL_MAP = (() => {
   try { return JSON.parse(localStorage.getItem('user_col_map')) || {}; } catch { return {}; }
 })();
 
-function saveUserColMap() { localStorage.setItem('user_col_map', JSON.stringify(USER_COL_MAP)); }
+function saveUserColMap() {
+  localStorage.setItem('user_col_map', JSON.stringify(USER_COL_MAP));
+  // 5명 공유 — 백엔드에도 비동기 푸시
+  Object.entries(USER_COL_MAP).forEach(([h, f]) => { apiPushMapping(h, f); });
+}
+
+/* 서버 컬럼 매핑 가져와 로컬과 머지 (서버 우선) */
+async function initApiMappings() {
+  const remote = await apiFetchMappings();
+  if (!remote || !Array.isArray(remote.items)) return;
+  let added = 0;
+  remote.items.forEach(m => {
+    if (m && m.excel_header && m.db_field && !USER_COL_MAP[m.excel_header]) {
+      USER_COL_MAP[m.excel_header] = m.db_field;
+      added++;
+    }
+  });
+  if (added > 0) {
+    localStorage.setItem('user_col_map', JSON.stringify(USER_COL_MAP));
+    console.log('[API] 공유 컬럼 매핑 ' + added + '건 동기화');
+  }
+}
 
 // XLS_COL_MAP 정규화 캐시 — 지연 초기화 (XLS_COL_MAP이 아래쪽에 선언돼 있어서)
 let _XLS_COL_MAP_NORM = null;
@@ -2697,6 +2915,12 @@ function updateXlsFooter() {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('xlsOptNew').addEventListener('change', updateXlsFooter);
+  // 🌐 백엔드 API 초기 동기화 + 상태 배지
+  updateApiBadge();
+  initApiSync();
+  initApiMappings();
+  // 30초마다 헬스 체크 (배지 색 갱신)
+  setInterval(apiPing, 30000);
 });
 
 function closeXlsModal() {
@@ -2831,8 +3055,9 @@ function applyXlsMatching() {
     }
   }
 
-  // localStorage에 저장 (새로고침해도 유지)
-  saveBpmsData();
+  // localStorage 저장 + 백엔드 push
+  // 마스터 정리(cleanupCount>0) 발생 시 → 서버에서도 동일하게 정리
+  saveBpmsData(cleanupCount > 0);
 
   // 필터 옵션 동적 갱신 (새로 들어온 시공사·담당자·연도 등 반영)
   populateFilterOptions();
@@ -3516,102 +3741,316 @@ function closeBpmsModal() {
   document.getElementById('bpmsModal').classList.remove('active');
 }
 
-/* ── BPMS 첨부파일 다운로드 ── */
-function handleBpmsFileDownload() {
+/* ── BPMS 첨부파일 다운로드 (실제 자동화 호출) ── */
+const ATTACH_BRIDGE = 'http://localhost:8765';
+
+async function handleBpmsFileDownload() {
   const checked = document.querySelectorAll('.row-chk:checked');
   if (checked.length === 0) {
     showToast('⚠ 첨부파일을 다운로드할 프로젝트를 먼저 선택하세요.');
     return;
   }
 
-  // 모달 재활용 (BPMS 불러오기 모달과 동일 UI 재사용)
-  document.getElementById('bpmsModalTitle').textContent = `BPMS 첨부파일 다운로드 중... (${checked.length}건)`;
-  document.getElementById('bpmsModalSub').textContent   = `NAS에 저장 + 자동 분류·파싱 + DB 업데이트`;
+  const pjts = Array.from(checked)
+    .map(c => c.closest('tr').dataset.pjt)
+    .filter(Boolean);
+
+  if (pjts.length === 0) {
+    showToast('⚠ 선택한 행에서 PJT 코드를 읽지 못했습니다.');
+    return;
+  }
+
+  // 모달 준비
+  document.getElementById('bpmsModalTitle').textContent = `BPMS 첨부파일 다운로드 (${pjts.length}건)`;
+  document.getElementById('bpmsModalSub').textContent   = `NAS attachments\\ 폴더로 ZIP 다운로드 + 자동 압축해제`;
   document.getElementById('bpmsProgressBar').style.width = '0%';
   document.getElementById('bpmsResult').style.display = 'none';
   document.getElementById('bpmsOkBtn').style.display  = 'none';
   document.getElementById('bpmsCloseBtn').textContent = '닫기';
 
-  const steps = [
-    `${checked.length}개 프로젝트 첨부파일 목록 조회`,
-    `NAS 폴더 일괄 다운로드 (예상 ${checked.length * 25}개 파일)`,
-    `파일명 키워드 기반 7종 자동 분류`,
-    `현장실사확인서 · 계약서 PDF 텍스트 추출`,
-    `사업자등록증 OCR 처리`,
-    `DB 업데이트 + 검수 대상 분류`,
-  ];
-
   const stepsEl = document.getElementById('bpmsSteps');
-  stepsEl.innerHTML = steps.map((s, i) =>
-    `<div class="bpms-step" id="dl${i}"><span class="bpms-step-icon">○</span>${s}</div>`
-  ).join('');
-
+  stepsEl.innerHTML = `
+    <div class="bpms-step active" id="att-init">
+      <span class="bpms-step-icon">▷</span> 자동화 브리지 연결 (${ATTACH_BRIDGE})
+    </div>
+    <div class="bpms-step" id="att-log">
+      <span class="bpms-step-icon">○</span> 실행 로그 대기 중...
+    </div>`;
   document.getElementById('bpmsModal').classList.add('active');
 
-  let i = 0;
-  function next() {
-    if (i < steps.length) {
-      if (i > 0) {
-        const prev = document.getElementById(`dl${i-1}`);
-        prev.className = 'bpms-step done';
-        prev.querySelector('.bpms-step-icon').textContent = '✓';
-      }
-      const cur = document.getElementById(`dl${i}`);
-      cur.className = 'bpms-step active';
-      cur.querySelector('.bpms-step-icon').textContent = '▷';
-      document.getElementById('bpmsProgressBar').style.width =
-        `${Math.round((i + 1) / steps.length * 100)}%`;
-      i++;
-      setTimeout(next, 800 + Math.random() * 400);
-    } else {
-      const last = document.getElementById(`dl${steps.length - 1}`);
-      last.className = 'bpms-step done';
-      last.querySelector('.bpms-step-icon').textContent = '✓';
-      document.getElementById('bpmsProgressBar').style.width = '100%';
-
-      // 결과 시뮬레이션: 일부는 ready, 일부는 review 상태로 분류
-      const total  = checked.length;
-      const ready  = Math.floor(total * 0.78);
-      const review = total - ready;
-
-      // 체크된 행들의 상태를 업데이트 (시뮬레이션)
-      checked.forEach((c, idx) => {
-        const tr = c.closest('tr');
-        const pjt = tr.dataset.pjt;
-        const item = SAMPLE.find(s => s.pjt === pjt);
-        if (item && item.reg_status !== 'done') {
-          item.reg_status = idx < ready ? 'ready' : 'review';
-        }
-      });
-
-      const resultEl = document.getElementById('bpmsResult');
-      resultEl.innerHTML = `
-        ✅ 첨부파일 다운로드 + DB 업데이트 완료<br>
-        <strong>${total}</strong>건 처리 &nbsp;
-        <span style="font-size:12px;color:#9d174d;">
-          ( ✅ 등록 준비 ${ready}건 · ⚠ 검수 필요 ${review}건 )
-        </span>`;
-      resultEl.style.display = 'block';
-
-      document.getElementById('bpmsModalTitle').textContent = '다운로드 + DB 업데이트 완료!';
-      document.getElementById('bpmsModalSub').textContent   = review > 0
-        ? `⚠ ${review}건은 담당자 검수가 필요합니다. 검수 화면으로 이동하세요.`
-        : `🎉 모든 프로젝트가 누리집 등록 준비 완료 상태입니다.`;
-      document.getElementById('bpmsOkBtn').style.display    = 'inline-block';
-      document.getElementById('bpmsOkBtn').textContent      = review > 0 ? '검수 화면으로 →' : '확인';
-      document.getElementById('bpmsOkBtn').onclick = () => {
-        document.getElementById('bpmsModal').classList.remove('active');
-        if (review > 0) {
-          showToast('🔧 검수 화면으로 이동합니다...');
-          setTimeout(() => { window.location.href = 'files.html'; }, 800);
-        }
-      };
-
-      // 표 새로고침
-      renderTable();
-    }
+  // 1. 브리지 health 체크
+  try {
+    const h = await fetch(`${ATTACH_BRIDGE}/health`, { cache: 'no-store' });
+    if (!h.ok) throw new Error('bridge 응답 없음');
+  } catch (e) {
+    document.getElementById('att-init').className = 'bpms-step';
+    document.getElementById('att-init').querySelector('.bpms-step-icon').textContent = '✗';
+    showToast('❌ 자동화 브리지가 꺼져있습니다. bridge.bat 을 먼저 실행하세요.', 6000);
+    document.getElementById('bpmsModalSub').textContent = '⚠ bridge.bat 콘솔이 켜져있는지 확인하세요.';
+    document.getElementById('bpmsOkBtn').style.display = 'inline-block';
+    document.getElementById('bpmsOkBtn').textContent   = '닫기';
+    document.getElementById('bpmsOkBtn').onclick = closeBpmsModal;
+    return;
   }
-  setTimeout(next, 300);
+
+  // 2. 다운로드 요청
+  let runResp;
+  try {
+    const r = await fetch(`${ATTACH_BRIDGE}/download-attachments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pjts }),
+    });
+    runResp = await r.json();
+    if (!runResp.ok) throw new Error(runResp.error || '시작 실패');
+  } catch (e) {
+    showToast(`❌ 자동화 시작 실패: ${e.message}`, 6000);
+    document.getElementById('bpmsOkBtn').style.display = 'inline-block';
+    document.getElementById('bpmsOkBtn').textContent   = '닫기';
+    document.getElementById('bpmsOkBtn').onclick = closeBpmsModal;
+    return;
+  }
+
+  document.getElementById('att-init').className = 'bpms-step done';
+  document.getElementById('att-init').querySelector('.bpms-step-icon').textContent = '✓';
+
+  // 3. 진행 상태 폴링 (1초마다)
+  const logEl = document.getElementById('att-log');
+  logEl.className = 'bpms-step active';
+  logEl.querySelector('.bpms-step-icon').textContent = '▷';
+
+  const poll = async () => {
+    try {
+      const s = await fetch(`${ATTACH_BRIDGE}/status`, { cache: 'no-store' });
+      const data = await s.json();
+      const logs = (data.log || []).slice(-8);
+      logEl.innerHTML = `<span class="bpms-step-icon">▷</span>실행 중...<br>
+        <pre style="margin:6px 0 0 22px;padding:8px;background:#f8f8f8;border-radius:6px;font-size:11px;line-height:1.5;max-height:200px;overflow:auto;white-space:pre-wrap;">${
+          logs.map(l => `[${l.time}] ${l.msg}`).join('\n').replace(/</g, '&lt;')
+        }</pre>`;
+
+      // 진행률 (단순 시간 기반 — 실제론 PJT 처리 기준으로 개선 가능)
+      if (data.status === 'running') {
+        const elapsed = (Date.now()/1000) - (data.started_at || Date.now()/1000);
+        const est = pjts.length * 30; // PJT당 ~30초 예상
+        const pct = Math.min(95, Math.round(elapsed / est * 100));
+        document.getElementById('bpmsProgressBar').style.width = `${pct}%`;
+        setTimeout(poll, 1500);
+      } else {
+        // 종료
+        document.getElementById('bpmsProgressBar').style.width = '100%';
+        logEl.className = 'bpms-step done';
+        logEl.querySelector('.bpms-step-icon').textContent = '✓';
+
+        // 마지막 로그에서 RESULT_JSON 파싱 시도
+        let summary = null;
+        const allText = (data.log || []).map(l => l.msg).join('\n');
+        const m = allText.match(/=== RESULT_JSON ===\s*([\s\S]*?)\s*=== END_RESULT_JSON ===/);
+        if (m) {
+          try { summary = JSON.parse(m[1]); } catch {}
+        }
+
+        const resEl = document.getElementById('bpmsResult');
+        if (data.status === 'done' && summary) {
+          // ⭐ 성공한 PJT 들의 reg_status 를 'attached' 로 갱신 (이미 'done' 인 것은 유지)
+          let updatedCnt = 0;
+          (summary.details || []).forEach(d => {
+            if (!d.errors || d.errors.length === 0) {
+              const item = SAMPLE.find(s => normalizePjt(s.pjt) === normalizePjt(d.pjt));
+              if (item && item.reg_status !== 'done') {
+                item.reg_status = 'attached';
+                item.attachments_at = new Date().toISOString().slice(0, 19);
+                updatedCnt++;
+              }
+            }
+          });
+          if (updatedCnt > 0) {
+            saveBpmsData();
+            populateFilterOptions();
+            if (typeof handleSearch === 'function') {
+              // 현재 필터로 재검색 (배지 갱신)
+              try { handleSearch(); } catch {}
+            }
+          }
+
+          resEl.innerHTML = `
+            ✅ <strong>${summary.total_pjts}</strong>건 PJT 처리 완료<br>
+            📦 ZIP <strong>${summary.downloaded}</strong>개 다운로드 ·
+            📂 파일 <strong>${summary.extracted}</strong>개 추출
+            ${summary.errors > 0 ? ` · ❌ 오류 ${summary.errors}건` : ''}
+            ${updatedCnt > 0 ? `<br>🏷 <strong>${updatedCnt}</strong>건 상태 "📥 첨부 받음" 으로 자동 갱신` : ''}`;
+          document.getElementById('bpmsModalTitle').textContent = '첨부파일 다운로드 완료!';
+          document.getElementById('bpmsModalSub').textContent = `저장: \\\\GSChargev_NAS\\EV사업실\\[영업현황 자동화_NAS]\\attachments\\`;
+        } else if (data.status === 'done') {
+          resEl.innerHTML = `✅ 작업 완료 (exit code: ${data.exit_code})`;
+          document.getElementById('bpmsModalTitle').textContent = '완료';
+        } else {
+          resEl.innerHTML = `❌ 실행 실패 (exit code: ${data.exit_code})`;
+          document.getElementById('bpmsModalTitle').textContent = '오류';
+        }
+        resEl.style.display = 'block';
+        document.getElementById('bpmsOkBtn').style.display = 'inline-block';
+        document.getElementById('bpmsOkBtn').textContent = '확인';
+        document.getElementById('bpmsOkBtn').onclick = closeBpmsModal;
+      }
+    } catch (e) {
+      setTimeout(poll, 3000);  // 폴링 실패 시 재시도
+    }
+  };
+  poll();
+}
+
+/* ── PDF 분석 (현장실사 확인서 / 사업자등록증) ── */
+async function handlePdfExtract() {
+  const checked = document.querySelectorAll('.row-chk:checked');
+  if (checked.length === 0) {
+    showToast('⚠ PDF 분석할 프로젝트를 먼저 선택하세요.');
+    return;
+  }
+  const pjts = Array.from(checked).map(c => c.closest('tr').dataset.pjt).filter(Boolean);
+  if (pjts.length === 0) {
+    showToast('⚠ 선택한 행에서 PJT 코드를 읽지 못했습니다.');
+    return;
+  }
+
+  // 모달 준비
+  document.getElementById('bpmsModalTitle').textContent = `🔍 PDF 분석 (${pjts.length}건)`;
+  document.getElementById('bpmsModalSub').textContent   = `현장실사 확인서 / 사업자등록증에서 5개 필드 추출`;
+  document.getElementById('bpmsProgressBar').style.width = '0%';
+  document.getElementById('bpmsResult').style.display = 'none';
+  document.getElementById('bpmsOkBtn').style.display  = 'none';
+  document.getElementById('bpmsCloseBtn').textContent = '닫기';
+
+  const stepsEl = document.getElementById('bpmsSteps');
+  stepsEl.innerHTML = `
+    <div class="bpms-step active" id="pdf-init">
+      <span class="bpms-step-icon">▷</span> 자동화 브리지 연결
+    </div>
+    <div class="bpms-step" id="pdf-log">
+      <span class="bpms-step-icon">○</span> 분석 진행 로그
+    </div>`;
+  document.getElementById('bpmsModal').classList.add('active');
+
+  // 1. 브리지 ping
+  try {
+    const h = await fetch(`${ATTACH_BRIDGE}/health`, { cache: 'no-store' });
+    if (!h.ok) throw new Error('bridge 응답 없음');
+  } catch (e) {
+    document.getElementById('pdf-init').className = 'bpms-step';
+    document.getElementById('pdf-init').querySelector('.bpms-step-icon').textContent = '✗';
+    showToast('❌ 자동화 브리지가 꺼져있습니다. bridge.bat 을 먼저 실행하세요.', 6000);
+    document.getElementById('bpmsOkBtn').style.display = 'inline-block';
+    document.getElementById('bpmsOkBtn').textContent = '닫기';
+    document.getElementById('bpmsOkBtn').onclick = closeBpmsModal;
+    return;
+  }
+
+  // 2. 분석 요청
+  try {
+    const r = await fetch(`${ATTACH_BRIDGE}/extract-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pjts }),
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || '시작 실패');
+  } catch (e) {
+    showToast(`❌ PDF 분석 시작 실패: ${e.message}`, 6000);
+    document.getElementById('bpmsOkBtn').style.display = 'inline-block';
+    document.getElementById('bpmsOkBtn').textContent = '닫기';
+    document.getElementById('bpmsOkBtn').onclick = closeBpmsModal;
+    return;
+  }
+
+  document.getElementById('pdf-init').className = 'bpms-step done';
+  document.getElementById('pdf-init').querySelector('.bpms-step-icon').textContent = '✓';
+  const logEl = document.getElementById('pdf-log');
+  logEl.className = 'bpms-step active';
+  logEl.querySelector('.bpms-step-icon').textContent = '▷';
+
+  // 3. 폴링
+  const poll = async () => {
+    try {
+      const s = await fetch(`${ATTACH_BRIDGE}/status`, { cache: 'no-store' });
+      const data = await s.json();
+      const logs = (data.log || []).slice(-10);
+      logEl.innerHTML = `<span class="bpms-step-icon">▷</span>분석 중...<br>
+        <pre style="margin:6px 0 0 22px;padding:8px;background:#f8f8f8;border-radius:6px;font-size:11px;line-height:1.5;max-height:240px;overflow:auto;white-space:pre-wrap;">${
+          logs.map(l => `[${l.time}] ${l.msg}`).join('\n').replace(/</g, '&lt;')
+        }</pre>`;
+
+      if (data.status === 'running') {
+        const elapsed = (Date.now()/1000) - (data.started_at || Date.now()/1000);
+        const est = pjts.length * 5; // PJT당 ~5초 (PDF 분석은 빠름)
+        const pct = Math.min(95, Math.round(elapsed / est * 100));
+        document.getElementById('bpmsProgressBar').style.width = `${pct}%`;
+        setTimeout(poll, 1200);
+      } else {
+        document.getElementById('bpmsProgressBar').style.width = '100%';
+        logEl.className = 'bpms-step done';
+        logEl.querySelector('.bpms-step-icon').textContent = '✓';
+
+        // RESULT_JSON 파싱
+        let summary = null;
+        const allText = (data.log || []).map(l => l.msg).join('\n');
+        const m = allText.match(/=== RESULT_JSON ===\s*([\s\S]*?)\s*=== END_RESULT_JSON ===/);
+        if (m) { try { summary = JSON.parse(m[1]); } catch {} }
+
+        const resEl = document.getElementById('bpmsResult');
+        if (data.status === 'done' && summary) {
+          // ⭐ 추출된 필드를 SAMPLE 에 머지 + 상태 갱신
+          // 규칙: org_name / org_rep 은 영업정보 우선 — 이미 값 있으면 PDF 결과로 덮어쓰지 않음
+          const NO_OVERWRITE_IF_FILLED = new Set(['org_name', 'org_rep', 'org_biz_no']);
+          let updatedCnt = 0;
+          (summary.results || []).forEach(r => {
+            const item = SAMPLE.find(s => normalizePjt(s.pjt) === normalizePjt(r.pjt));
+            if (!item) return;
+            let changed = false;
+            Object.entries(r.extracted || {}).forEach(([k, v]) => {
+              if (!v || k.startsWith('_')) return;  // 메타 필드 제외
+              if (NO_OVERWRITE_IF_FILLED.has(k) && item[k]) return;  // 영업정보 우선
+              if (item[k] !== v) { item[k] = v; changed = true; }
+            });
+            if (changed) {
+              item.pdf_extracted_at = new Date().toISOString().slice(0, 19);
+              // 5개 핵심 필드 모두 있으면 'ready' 로 승격
+              const required = ['install_method','power_method','contact_name','contact_phone'];
+              const allFilled = required.every(k => item[k]);
+              if (allFilled && item.reg_status !== 'done') {
+                item.reg_status = 'ready';
+              }
+              updatedCnt++;
+            }
+          });
+          if (updatedCnt > 0) {
+            saveBpmsData();
+            populateFilterOptions();
+            try { handleSearch(); } catch {}
+          }
+
+          resEl.innerHTML = `
+            ✅ <strong>${summary.summary.total}</strong>건 분석 완료 ·
+            🎯 추출 성공 <strong>${summary.summary.matched}</strong>건
+            ${summary.summary.errors > 0 ? ` · ⚠ 오류 포함 ${summary.summary.errors}건` : ''}
+            ${updatedCnt > 0 ? `<br>🏷 ${updatedCnt}건 DB 업데이트` : ''}`;
+          document.getElementById('bpmsModalTitle').textContent = 'PDF 분석 완료!';
+          document.getElementById('bpmsModalSub').textContent =
+            `사업자등록증 (스캔본은 OCR 필요) / 현장실사 확인서 → 5개 필드`;
+        } else if (data.status === 'done') {
+          resEl.innerHTML = `✅ 작업 완료 (exit code: ${data.exit_code})`;
+        } else {
+          resEl.innerHTML = `❌ 실행 실패 (exit code: ${data.exit_code})`;
+        }
+        resEl.style.display = 'block';
+        document.getElementById('bpmsOkBtn').style.display = 'inline-block';
+        document.getElementById('bpmsOkBtn').textContent = '확인';
+        document.getElementById('bpmsOkBtn').onclick = closeBpmsModal;
+      }
+    } catch (e) {
+      setTimeout(poll, 3000);
+    }
+  };
+  poll();
 }
 
 /* ── 누리집 등록 — 작업 큐에 추가 ── */

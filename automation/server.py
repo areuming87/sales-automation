@@ -29,7 +29,9 @@ except Exception:
 # ──── 환경 ────────────────────────────────────────────────
 os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", r"C:\playwright_browsers")
 SCRIPT_DIR = Path(__file__).parent
-DOWNLOAD_SCRIPT = SCRIPT_DIR / "bpms_download.py"
+DOWNLOAD_SCRIPT    = SCRIPT_DIR / "bpms_download.py"
+ATTACHMENTS_SCRIPT = SCRIPT_DIR / "bpms_attachments.py"
+PDF_EXTRACT_SCRIPT = SCRIPT_DIR / "bpms_pdf_extract.py"
 
 app = FastAPI(title="BPMS Automation Bridge", version="1.0")
 
@@ -165,6 +167,149 @@ def run_automation():
 
     threading.Thread(target=_run_script_background, daemon=True).start()
     return {"ok": True, "message": "작업이 시작되었습니다."}
+
+
+def _run_attachments_background(pjt_list):
+    """별도 스레드에서 bpms_attachments.py 실행"""
+    with state_lock:
+        state["status"] = "running"
+        state["started_at"] = time.time()
+        state["finished_at"] = None
+        state["exit_code"] = None
+        state["log"] = []
+
+    _push_log(f"🚀 첨부파일 다운로드 시작 ({len(pjt_list)}건)...")
+
+    try:
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+
+        cmd = [sys.executable, "-u", str(ATTACHMENTS_SCRIPT)] + pjt_list
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(SCRIPT_DIR),
+            env=env,
+            bufsize=1,
+        )
+
+        for line in proc.stdout:
+            _push_log(line)
+
+        proc.wait()
+        with state_lock:
+            state["exit_code"] = proc.returncode
+            state["status"] = "done" if proc.returncode == 0 else "error"
+            state["finished_at"] = time.time()
+        _push_log(f"✅ 종료 (exit code: {proc.returncode})")
+
+    except Exception as e:
+        with state_lock:
+            state["status"] = "error"
+            state["finished_at"] = time.time()
+        _push_log(f"❌ 오류: {e}")
+
+
+class AttachmentRequest(BaseModel):
+    pjts: list[str]  # 다운로드할 PJT 코드 목록
+
+
+def _run_pdf_extract_background(pjt_list):
+    """별도 스레드에서 bpms_pdf_extract.py 실행"""
+    with state_lock:
+        state["status"] = "running"
+        state["started_at"] = time.time()
+        state["finished_at"] = None
+        state["exit_code"] = None
+        state["log"] = []
+
+    _push_log(f"🚀 PDF 분석 시작 ({len(pjt_list)}건)...")
+
+    try:
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+
+        cmd = [sys.executable, "-u", str(PDF_EXTRACT_SCRIPT)] + pjt_list
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(SCRIPT_DIR),
+            env=env,
+            bufsize=1,
+        )
+
+        for line in proc.stdout:
+            _push_log(line)
+
+        proc.wait()
+        with state_lock:
+            state["exit_code"] = proc.returncode
+            state["status"] = "done" if proc.returncode == 0 else "error"
+            state["finished_at"] = time.time()
+        _push_log(f"✅ 종료 (exit code: {proc.returncode})")
+
+    except Exception as e:
+        with state_lock:
+            state["status"] = "error"
+            state["finished_at"] = time.time()
+        _push_log(f"❌ 오류: {e}")
+
+
+@app.post("/extract-pdf")
+def extract_pdf(req: AttachmentRequest):
+    """선택한 PJT 들의 첨부 PDF 분석 → 5개 필드 추출"""
+    with state_lock:
+        if state["status"] == "running":
+            return {"ok": False, "error": "다른 작업이 실행 중입니다."}
+
+    pjts = [p.strip().upper() for p in req.pjts if p and p.strip()]
+    pjts = list(dict.fromkeys(pjts))
+    if not pjts:
+        return {"ok": False, "error": "PJT 코드가 비어 있습니다."}
+
+    threading.Thread(
+        target=_run_pdf_extract_background,
+        args=(pjts,),
+        daemon=True,
+    ).start()
+    return {"ok": True, "message": f"{len(pjts)}건 PDF 분석 시작", "pjts": pjts}
+
+
+@app.post("/download-attachments")
+def download_attachments(req: AttachmentRequest):
+    """선택한 PJT 들의 첨부파일을 NAS attachments/ 폴더로 일괄 다운로드"""
+    with state_lock:
+        if state["status"] == "running":
+            return {"ok": False, "error": "다른 작업이 실행 중입니다."}
+
+    pjts = [p.strip().upper() for p in req.pjts if p and p.strip()]
+    pjts = list(dict.fromkeys(pjts))  # 중복 제거 + 순서 유지
+
+    if not pjts:
+        return {"ok": False, "error": "PJT 코드가 비어 있습니다."}
+
+    threading.Thread(
+        target=_run_attachments_background,
+        args=(pjts,),
+        daemon=True,
+    ).start()
+    return {
+        "ok": True,
+        "message": f"{len(pjts)}건 첨부파일 다운로드 시작",
+        "pjts": pjts,
+    }
 
 
 @app.post("/cancel")

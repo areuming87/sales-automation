@@ -1,3 +1,9 @@
 playwright>=1.48.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
+pypdf>=4.0.0
+pdfplumber>=0.10.0
+# OCR — 사업자등록증 (스캔본 PDF) 텍스트 추출용
+PyMuPDF>=1.24.0
+pytesseract>=0.3.10
+Pillow>=10.0.0
