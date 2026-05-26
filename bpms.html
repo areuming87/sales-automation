@@ -1834,6 +1834,9 @@ const PAGE_SIZE = 20;
 /* ─────────────────────────────────────────────
    컬럼 메타데이터 — 너비/순서 사용자별 커스터마이즈 가능
 ───────────────────────────────────────────── */
+// ⭐ CURRENT_USER 는 TABLE_CFG_KEY 와 loadTableConfig 보다 먼저 정의되어야 함 (TDZ 회피)
+const CURRENT_USER = '김담당';
+
 const DEFAULT_COLUMNS = [
   { key:'reg_status', label:'누리집 등록가능',    width:140 },
   { key:'pjt',        label:'PJT 코드',          width:130 },
@@ -3724,7 +3727,7 @@ function showToast(msg, dur = 3000) {
    BPMS 동기화 — 전역 잠금 (5명이 같은 데이터 공유)
    실제 운영시: 서버/DB로 대체. 지금은 localStorage 시뮬레이션.
 ───────────────────────────────────────────── */
-const CURRENT_USER = '김담당';
+// CURRENT_USER 는 위에서 이미 정의됨 (line ~1838) — 중복 선언 제거
 const SYNC_KEY = 'bpms_sync_state';
 
 function getSyncState() {
@@ -3775,7 +3778,7 @@ function renderSyncBanner() {
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
   } else if (s.lastRefreshedAt) {
     const isFresh = (Date.now() - s.lastRefreshedAt) < 600 * 1000;  // 10분
-    banner.classList.add(isFresh ? 'fresh' : '');
+    if (isFresh) banner.classList.add('fresh');
     icon.textContent = isFresh ? '✅' : '🔄';
     title.innerHTML = `BPMS 마지막 갱신: <span class="who">${s.lastRefreshedBy}</span> · ${fmtTime(s.lastRefreshedAt)} (${fmtTimeAgo(s.lastRefreshedAt)})`;
     desc.textContent = isFresh
