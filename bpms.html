@@ -1754,14 +1754,24 @@ function loadTableConfig() {
       const result = [];
       cfg.columns.forEach(key => {
         const d = DEFAULT_COLUMNS.find(c => c.key === key);
-        if (d) result.push({ ...d, width: cfg.widths?.[key] || d.width });
+        if (d && !result.some(r => r.key === key)) {
+          result.push({ ...d, width: cfg.widths?.[key] || d.width });
+        }
       });
+      // 누락된 DEFAULT 컬럼 자동 추가 (뒤에)
       DEFAULT_COLUMNS.forEach(d => {
         if (!result.some(r => r.key === d.key)) result.push({ ...d });
       });
+      // ⭐ 안전망: 결과가 DEFAULT_COLUMNS 개수보다 적으면 → 손상 의심 → 기본값으로 리셋
+      if (result.length < DEFAULT_COLUMNS.length) {
+        console.warn('[TABLE] 저장된 컬럼 설정 손상 감지 → 기본값으로 복구');
+        return DEFAULT_COLUMNS.map(c => ({ ...c }));
+      }
       return result;
     }
-  } catch {}
+  } catch (e) {
+    console.warn('[TABLE] 설정 로드 실패 → 기본값:', e);
+  }
   return DEFAULT_COLUMNS.map(c => ({ ...c }));
 }
 
@@ -2075,6 +2085,15 @@ function stopColResize(e) {
 
 /* ── 테이블 렌더링 ── */
 function renderTable() {
+  // ⭐ 헤더 누락 자동 복구 — 헤더 row 가 비어있으면 다시 그림
+  try {
+    const headerRow = document.getElementById('tableHeaderRow');
+    if (headerRow && headerRow.children.length === 0) {
+      console.warn('[TABLE] 헤더 누락 감지 → 자동 재렌더링');
+      renderTableHeader();
+    }
+  } catch {}
+
   const tbody  = document.getElementById('tableBody');
   const footer = document.getElementById('tableFooter');
 
