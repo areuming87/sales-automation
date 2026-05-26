@@ -1504,7 +1504,12 @@ async function initApiSync() {
     try { localStorage.setItem(BPMS_DATA_KEY, JSON.stringify(SAMPLE)); } catch {}
     // 화면 갱신 (handleSearch가 존재할 때만)
     if (typeof populateFilterOptions === 'function') populateFilterOptions();
+    if (typeof renderTableHeader === 'function') renderTableHeader();  // ⭐ 헤더 누락 방지
     if (typeof handleSearch === 'function') handleSearch();
+    // 안전망: 50ms 뒤에 한 번 더 (DOM 갱신 충돌 회피)
+    setTimeout(() => {
+      if (typeof populateFilterOptions === 'function') populateFilterOptions();
+    }, 50);
   }
 }
 
@@ -1826,13 +1831,23 @@ function fillSelect(id, values, currentValue) {
 }
 
 function populateFilterOptions() {
-  fillSelect('f_year',    uniqueValues('year'));
-  fillSelect('f_manager', uniqueValues('manager'));
-  fillSelect('f_partner', uniqueValues('partner'));
-  fillSelect('f_biz1',    uniqueValues('biz1'));
-  fillSelect('f_biz2',    uniqueValues('biz2'));
+  const yrs = uniqueValues('year');
+  const mgrs = uniqueValues('manager');
+  const ptrs = uniqueValues('partner');
+  const b1 = uniqueValues('biz1');
+  const b2 = uniqueValues('biz2');
+  console.log('[FILTER OPTIONS]', {
+    sample_size: SAMPLE.length,
+    year: yrs.length, manager: mgrs.length, partner: ptrs.length,
+    biz1: b1.length, biz2: b2.length,
+  });
+  fillSelect('f_year',    yrs);
+  fillSelect('f_manager', mgrs);
+  fillSelect('f_partner', ptrs);
+  fillSelect('f_biz1',    b1);
+  fillSelect('f_biz2',    b2);
   // 사업구분1-상세는 현재 선택된 사업구분1에 따라
-  onBiz1Change(true);
+  try { onBiz1Change(true); } catch (e) { console.warn('biz1 연동 오류:', e); }
 }
 
 /* ── 사업구분1 연동 (실제 데이터 기반) ── */
@@ -1860,6 +1875,15 @@ function onFilterChange() {
 
 /* ── 검색 ── */
 function handleSearch() {
+  // ⭐ 검색 직전 필터 옵션 새로고침 — API 응답 늦거나 드롭다운 안 차있을 때 안전망
+  // (불러올 데이터 없으면 함수 안에서 no-op)
+  try {
+    const yearSel = document.getElementById('f_year');
+    if (yearSel && yearSel.options.length <= 1 && SAMPLE.length > 0) {
+      populateFilterOptions();
+    }
+  } catch {}
+
   const year    = document.getElementById('f_year').value;
   const manager = document.getElementById('f_manager').value;
   const partner = document.getElementById('f_partner').value;
