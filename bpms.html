@@ -595,6 +595,31 @@
       padding: 3px 9px; border-radius: 20px;
       white-space: nowrap;
     }
+    /* 편집 가능 셀 — 호버 시 시각 힌트 */
+    td.editable-cell {
+      cursor: text;
+      transition: background 0.15s;
+    }
+    td.editable-cell:hover {
+      background: #fef3c7;  /* 연한 노랑 */
+      box-shadow: inset 0 0 0 1px #f59e0b;
+    }
+    td.editable-cell:empty::before {
+      content: '✏';
+      color: var(--gray-300);
+      font-size: 11px;
+    }
+    .cell-edit-input {
+      width: 100%;
+      border: 2px solid var(--primary);
+      padding: 4px 6px;
+      font-family: inherit;
+      font-size: inherit;
+      border-radius: 4px;
+      background: #fffbeb;
+      outline: none;
+    }
+
     .reg-status.ready    { background: #dcfce7; color: #15803d; }
     .reg-status.attached { background: #fce7f3; color: #9d174d; }
     .reg-status.review   { background: #fef3c7; color: #92400e; }
@@ -1742,6 +1767,15 @@ const DEFAULT_COLUMNS = [
   { key:'reg_date',   label:'계약 등록일',        width:110 },
   { key:'sales_date', label:'영업승인일',        width:100 },
   { key:'env_date',   label:'환경부 승인일자',   width:120 },
+  // ── PDF/OCR 추출 컬럼 (편집 가능) ──
+  { key:'org_name',         label:'기관명',          width:200, editable:true },
+  { key:'org_rep',          label:'대표자',          width:80,  editable:true },
+  { key:'org_biz_no',       label:'사업자번호',      width:120, editable:true },
+  { key:'office_phone',     label:'사무실 연락처',   width:120, editable:true },
+  { key:'install_method',   label:'설치방식',        width:90,  editable:true },
+  { key:'power_method',     label:'전기수전방식',    width:100, editable:true },
+  { key:'contact_name',     label:'담당자 성명',     width:90,  editable:true },
+  { key:'contact_phone',    label:'담당자 휴대폰',   width:120, editable:true },
 ];
 
 const TABLE_CFG_KEY = () => `table_config_${CURRENT_USER}`;  // 사용자별 저장
@@ -1971,6 +2005,42 @@ function renderTableHeader() {
   tr.innerHTML = html;
 }
 
+/* ── 인라인 셀 편집 ── */
+function beginEditCell(td) {
+  if (td.querySelector('input')) return;  // 이미 편집 중
+  const tr = td.closest('tr');
+  const pjt = tr.dataset.pjt;
+  const key = td.dataset.key;
+  const item = SAMPLE.find(s => normalizePjt(s.pjt) === normalizePjt(pjt));
+  if (!item) return;
+
+  const oldVal = item[key] || '';
+  td.innerHTML = `<input type="text" class="cell-edit-input" value="${
+    String(oldVal).replace(/"/g,'&quot;')
+  }" />`;
+  const input = td.querySelector('input');
+  input.focus();
+  input.select();
+
+  const commit = (save) => {
+    if (input.dataset.committed === '1') return;
+    input.dataset.committed = '1';
+    const newVal = save ? input.value.trim() : oldVal;
+    if (save && newVal !== oldVal) {
+      item[key] = newVal;
+      saveBpmsData();
+      showToast(`✏ ${pjt} · ${key} = "${newVal}" 저장됨`, 2500);
+    }
+    td.innerHTML = String(newVal).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  };
+
+  input.addEventListener('blur', () => commit(true));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); commit(false); }
+  });
+}
+
 /* 컬럼 키로 셀 값 추출 */
 function cellValueOf(r, key) {
   if (key === 'reg_status') {
@@ -2122,10 +2192,21 @@ function renderTable() {
   tbody.innerHTML = pageData.map(r => {
     let cells = `<td><input type="checkbox" class="row-chk" data-status="${r.reg_status}" /></td>`;
     TABLE_COLS.forEach(col => {
-      cells += `<td>${cellValueOf(r, col.key)}</td>`;
+      const val = cellValueOf(r, col.key);
+      const escVal = String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      if (col.editable) {
+        cells += `<td class="editable-cell" data-key="${col.key}" title="더블클릭해서 편집">${escVal}</td>`;
+      } else {
+        cells += `<td>${escVal}</td>`;
+      }
     });
     return `<tr data-pjt="${r.pjt}" data-status="${r.reg_status}">${cells}</tr>`;
   }).join('');
+
+  // ⭐ 편집 가능 셀 — 더블클릭으로 편집 모드 진입
+  tbody.querySelectorAll('td.editable-cell').forEach(td => {
+    td.ondblclick = () => beginEditCell(td);
+  });
 
   // 총 건수만 표시 (페이지네이션 없음)
   const total = filteredData.length;
