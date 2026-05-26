@@ -4353,14 +4353,24 @@ async function handlePdfExtract() {
             try { handleSearch(); } catch {}
           }
 
+          // OCR 필요 PJT 카운트
+          const needOcrPjts = (summary.results || [])
+            .filter(r => r.extracted && r.extracted._needs_ocr)
+            .map(r => r.pjt);
+          const needOcrMsg = needOcrPjts.length > 0
+            ? `<br>⚠ <strong>${needOcrPjts.length}건</strong> 알PDF OCR 필요: ${needOcrPjts.slice(0,5).join(', ')}${needOcrPjts.length>5?' …':''}`
+            : '';
+
           resEl.innerHTML = `
             ✅ <strong>${summary.summary.total}</strong>건 분석 완료 ·
             🎯 추출 성공 <strong>${summary.summary.matched}</strong>건
             ${summary.summary.errors > 0 ? ` · ⚠ 오류 포함 ${summary.summary.errors}건` : ''}
-            ${updatedCnt > 0 ? `<br>🏷 ${updatedCnt}건 DB 업데이트` : ''}`;
+            ${updatedCnt > 0 ? `<br>🏷 ${updatedCnt}건 DB 업데이트` : ''}
+            ${needOcrMsg}`;
           document.getElementById('bpmsModalTitle').textContent = 'PDF 분석 완료!';
-          document.getElementById('bpmsModalSub').textContent =
-            `사업자등록증 (스캔본은 OCR 필요) / 현장실사 확인서 → 5개 필드`;
+          document.getElementById('bpmsModalSub').textContent = needOcrPjts.length > 0
+            ? '⚠ 스캔본 PDF 는 알PDF 일괄편집(OCR) 후 다시 분석해주세요.'
+            : '5개 필드 추출 완료';
         } else if (data.status === 'done') {
           resEl.innerHTML = `✅ 작업 완료 (exit code: ${data.exit_code})`;
         } else {

@@ -493,6 +493,10 @@ def main():
         log(f"📂 추출 파일:   {total_ex}개")
         log(f"❌ 오류:         {total_err}건")
 
+        # OCR 변환은 '🔍 PDF 분석' 단계에서 자동 수행 — 여기서는 다운로드만
+        if total_dl > 0:
+            log("\n💡 다음 단계: 'PDF 분석' 클릭 시 스캔본 PDF 가 자동 OCR 변환됩니다.")
+
         if total_err > 0:
             log("\n--- 오류 상세 ---")
             for r in all_results:

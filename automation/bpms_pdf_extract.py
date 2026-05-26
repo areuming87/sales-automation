@@ -108,6 +108,43 @@ def _setup_ocr():
     return True
 
 
+def _convert_pdf_to_searchable(pdf_path: Path, dpi: int = 400) -> bool:
+    """스캔본 PDF → 검색가능 PDF 로 변환 (덮어쓰기 + 원본은 _original_scan/ 백업)
+       반환: True 성공, False 실패"""
+    if not _setup_ocr():
+        return False
+    try:
+        import fitz, pytesseract, io, shutil
+        from PIL import Image
+
+        new_doc = fitz.open()
+        with fitz.open(str(pdf_path)) as src:
+            for page in src:
+                pix = page.get_pixmap(dpi=dpi)
+                img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                pdf_bytes = pytesseract.image_to_pdf_or_hocr(
+                    img, lang="kor+eng", extension="pdf", config="--psm 6"
+                )
+                with fitz.open("pdf", pdf_bytes) as page_doc:
+                    new_doc.insert_pdf(page_doc)
+
+        # 원본 백업 + 검색가능 PDF 로 교체
+        backup_dir = pdf_path.parent / "_original_scan"
+        backup_dir.mkdir(exist_ok=True)
+        backup_path = backup_dir / pdf_path.name
+        if not backup_path.exists():
+            shutil.copy2(str(pdf_path), str(backup_path))
+
+        tmp_path = pdf_path.with_suffix(pdf_path.suffix + ".tmp")
+        new_doc.save(str(tmp_path))
+        new_doc.close()
+        shutil.move(str(tmp_path), str(pdf_path))
+        return True
+    except Exception as e:
+        print(f"    ⚠ PDF → 검색가능 변환 실패: {e}", flush=True)
+        return False
+
+
 def _ocr_pdf_text(pdf_path: Path, dpi: int = 400) -> str:
     """스캔본 PDF → OCR 텍스트. 페이지별 OCR + 다중 PSM 시도.
        OCR 불가 시 빈 문자열."""
@@ -401,20 +438,16 @@ def process_pjt(pjt: str, dump_text: bool = False) -> dict:
         print("  ❌ 대상 PDF 없음", flush=True)
         return result
 
-    # 사업자등록증 (스캔본이면 OCR 사용)
+    # 사업자등록증 — 텍스트 없으면 알PDF 로 OCR 필요 (안내만)
     for pdf in pdfs["business"]:
         print(f"  📄 사업자등록증: {pdf.name}", flush=True)
         text = _read_pdf_text(pdf)
         used_ocr = False
         if not text.strip():
-            print("    🔍 텍스트 추출 실패 → OCR 시도 중...", flush=True)
-            text = _ocr_pdf_text(pdf)
-            used_ocr = True
-            if not text.strip():
-                result["errors"].append(f"{pdf.name}: OCR 도 실패")
-                print("    ⚠ OCR 도 텍스트 못 뽑음", flush=True)
-                continue
-            print("    ✓ OCR 성공", flush=True)
+            result["errors"].append(f"{pdf.name}: 텍스트 없음 — 알PDF 로 OCR 필요")
+            print("    ⚠ 텍스트 없음 (스캔본) — 알PDF 일괄편집 OCR 후 다시 시도하세요.", flush=True)
+            result["extracted"]["_needs_ocr"] = True
+            continue
         if dump_text:
             print(f"    --- 추출 텍스트 ({'OCR' if used_ocr else 'TEXT'}) ---", flush=True)
             print(text[:8000], flush=True)
@@ -429,13 +462,14 @@ def process_pjt(pjt: str, dump_text: bool = False) -> dict:
         if used_ocr:
             result["extracted"]["_business_via_ocr"] = True
 
-    # 현장실사 확인서
+    # 현장실사 확인서 — 텍스트 없으면 알PDF 로 OCR 필요 (안내만)
     for pdf in pdfs["inspection"]:
         print(f"  📄 현장실사 확인서: {pdf.name}", flush=True)
         text = _read_pdf_text(pdf)
         if not text.strip():
-            result["errors"].append(f"{pdf.name}: 텍스트 추출 실패")
-            print("    ⚠ 텍스트 추출 실패", flush=True)
+            result["errors"].append(f"{pdf.name}: 텍스트 없음 — 알PDF 로 OCR 필요")
+            print("    ⚠ 텍스트 없음 (스캔본) — 알PDF 일괄편집 OCR 후 다시 시도하세요.", flush=True)
+            result["extracted"]["_needs_ocr"] = True
             continue
         if dump_text:
             print("    --- 추출 텍스트 ---", flush=True)
@@ -456,6 +490,8 @@ def parse_args():
     ap.add_argument("--pjts", dest="pjts_csv")
     ap.add_argument("--all", action="store_true", help="attachments 폴더 전체 처리")
     ap.add_argument("--dump", dest="dump_pjt", help="해당 PJT 의 PDF 텍스트 원본 출력 (정규식 디버깅)")
+    ap.add_argument("--no-auto-ocr", action="store_true",
+                    help="자동 Tesseract OCR 변환 비활성화 (알PDF batch 결과 사용 시)")
     args = ap.parse_args()
 
     pjts = list(args.pjts)
