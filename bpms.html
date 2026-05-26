@@ -1397,6 +1397,34 @@ function normalizePjt(code) {
   return String(code || '').trim().toUpperCase();
 }
 
+/* OCR 자모 분리 띄어쓰기 정상화
+   "장 유 덕 산 아 내" → "장유덕산아내"
+   3글자 이상 연속 한글-공백-한글 패턴만 압축 (정상 띄어쓰기 보존) */
+function normalizeKoreanSpacing(text) {
+  if (!text) return text;
+  return String(text).replace(
+    /([가-힣])(?:\s+[가-힣]){2,}/g,
+    m => m.replace(/\s+/g, '')
+  );
+}
+
+/* PDF 추출 필드들 — 정상화 대상 */
+const KOREAN_TEXT_FIELDS = ['org_name', 'org_rep', 'contact_name', 'inspector_company'];
+
+/* SAMPLE 전체 PDF 텍스트 필드 정상화 (DB 가져온 후·저장 전 등) */
+function normalizeAllSampleTextFields() {
+  let changed = 0;
+  SAMPLE.forEach(item => {
+    KOREAN_TEXT_FIELDS.forEach(k => {
+      if (item[k]) {
+        const cleaned = normalizeKoreanSpacing(item[k]).trim();
+        if (cleaned !== item[k]) { item[k] = cleaned; changed++; }
+      }
+    });
+  });
+  return changed;
+}
+
 /* 중복 PJT 자동 제거 — 첫 번째 등장한 행을 유지, 나중 것은 같은 PJT면 병합·업데이트 */
 function dedupeSample(options = {}) {
   const merge = options.merge !== false;  // 기본: 병합 (뒤에 나온 데이터로 빈 값 채우기)
@@ -1437,6 +1465,8 @@ function dedupeSample(options = {}) {
   return removed;
 }
 function saveBpmsData(cleanupMaster = false) {
+  // ⭐ 저장 전 한글 텍스트 필드 정상화 — 저장값이 항상 깨끗
+  try { normalizeAllSampleTextFields(); } catch {}
   try { localStorage.setItem(BPMS_DATA_KEY, JSON.stringify(SAMPLE)); }
   catch (e) { console.error('데이터 저장 실패:', e); }
   // 백엔드에도 비동기 push (실패해도 로컬은 살아있음)
@@ -1573,6 +1603,13 @@ async function initApiSync() {
     console.log('[API] 서버에서 ' + remote.length + '건 받아옴 → 로컬 교체');
     SAMPLE.length = 0;
     SAMPLE.push(...remote);
+    // ⭐ 정상화 + DB 에 정상화된 값 다시 push (1회 청소)
+    const cleaned = normalizeAllSampleTextFields();
+    if (cleaned > 0) {
+      console.log(`[CLEANUP] 한글 띄어쓰기 정상화: ${cleaned}건`);
+      // 서버에도 청소 결과 반영 (비동기)
+      apiPushProjects(SAMPLE).catch(() => {});
+    }
     try { localStorage.setItem(BPMS_DATA_KEY, JSON.stringify(SAMPLE)); } catch {}
     // 화면 갱신 (handleSearch가 존재할 때만)
     if (typeof populateFilterOptions === 'function') populateFilterOptions();
@@ -2182,6 +2219,10 @@ function cellValueOf(r, key) {
   }
   if (key === 'qty_slow') return r.qty_slow ?? r.qty ?? '';
   if (key === 'qty_fast') return r.qty_fast ?? '';
+  // PDF/OCR 추출 한글 필드는 자모 분리 띄어쓰기 정상화
+  if (KOREAN_TEXT_FIELDS.includes(key)) {
+    return normalizeKoreanSpacing(r[key] || '');
+  }
   return r[key] || '';
 }
 
