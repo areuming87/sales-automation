@@ -619,6 +619,53 @@
       background: #fffbeb;
       outline: none;
     }
+    .cell-edit-pdf-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .cell-edit-pdf-btn:hover {
+      background: #ec4899;
+    }
+    /* PDF 모달 — 우측 60% 영역 (편집 입력은 좌측에서 가능) */
+    #pdfModal {
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
+      width: 60vw;
+      z-index: 99998;
+      display: none;
+    }
+    #pdfModal.open { display: block; }
+    .pdf-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: 40vw;
+      background: rgba(0,0,0,0.15);
+      cursor: pointer;
+    }
+    .pdf-modal-box {
+      position: absolute;
+      top: 0; right: 0; bottom: 0;
+      width: 100%;
+      background: white;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.2);
+      display: flex;
+      flex-direction: column;
+    }
+    .pdf-modal-head {
+      height: 50px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--gray-200);
+      font-weight: 600;
+    }
 
     .reg-status.ready    { background: #dcfce7; color: #15803d; }
     .reg-status.attached { background: #fce7f3; color: #9d174d; }
@@ -2005,7 +2052,82 @@ function renderTableHeader() {
   tr.innerHTML = html;
 }
 
-/* ── 인라인 셀 편집 ── */
+/* ── 인라인 셀 편집 + PDF 팝업 ── */
+const PDF_FIELDS_TO_DOC = {
+  org_name: '사업자등록증', org_rep: '사업자등록증', org_biz_no: '사업자등록증',
+  install_method: '현장실사 확인서', power_method: '현장실사 확인서',
+  contact_name: '현장실사 확인서', contact_phone: '현장실사 확인서',
+};
+
+async function openPdfModalForField(pjt, fieldKey) {
+  const docName = PDF_FIELDS_TO_DOC[fieldKey] || '관련 PDF';
+  try {
+    const r = await fetch(`${API_BASE}/api/files/list?pjt=${pjt}&field=${fieldKey}`);
+    if (!r.ok) throw new Error('파일 목록 못 받아옴');
+    const data = await r.json();
+    if (!data.files || data.files.length === 0) {
+      showToast(`⚠ ${pjt} 의 ${docName} PDF 가 없습니다.`, 3500);
+      return;
+    }
+    // 첫 매칭 파일 표시
+    showPdfModal(pjt, data.files, 0, fieldKey);
+  } catch (e) {
+    showToast(`❌ PDF 열기 실패: ${e.message}`, 4000);
+  }
+}
+
+function showPdfModal(pjt, files, idx, fieldKey) {
+  let modal = document.getElementById('pdfModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'pdfModal';
+    modal.innerHTML = `
+      <div class="pdf-modal-overlay" onclick="closePdfModal()"></div>
+      <div class="pdf-modal-box">
+        <div class="pdf-modal-head">
+          <span id="pdfModalTitle"></span>
+          <div>
+            <select id="pdfFileSelect" onchange="onPdfFileSelect()" style="margin-right:8px;padding:4px 8px;border-radius:4px;border:1px solid #ddd;"></select>
+            <button onclick="closePdfModal()" style="padding:4px 10px;border:none;background:var(--gray-200);border-radius:4px;cursor:pointer;">✖ 닫기</button>
+          </div>
+        </div>
+        <iframe id="pdfModalFrame" style="width:100%;height:calc(100% - 50px);border:none;"></iframe>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const sel = modal.querySelector('#pdfFileSelect');
+  sel.innerHTML = files.map((f, i) =>
+    `<option value="${i}" ${i === idx ? 'selected' : ''}>${f.name} (${f.size_kb}KB)</option>`
+  ).join('');
+  modal.dataset.pjt = pjt;
+  modal.dataset.files = JSON.stringify(files);
+
+  modal.querySelector('#pdfModalTitle').textContent =
+    `📄 ${pjt} · ${PDF_FIELDS_TO_DOC[fieldKey] || ''}`;
+  const url = `${API_BASE}/api/files/pdf?pjt=${pjt}&path=${encodeURIComponent(files[idx].rel_path)}`;
+  modal.querySelector('#pdfModalFrame').src = url;
+  modal.classList.add('open');
+}
+
+function onPdfFileSelect() {
+  const modal = document.getElementById('pdfModal');
+  const sel = modal.querySelector('#pdfFileSelect');
+  const idx = parseInt(sel.value);
+  const files = JSON.parse(modal.dataset.files);
+  const pjt = modal.dataset.pjt;
+  const url = `${API_BASE}/api/files/pdf?pjt=${pjt}&path=${encodeURIComponent(files[idx].rel_path)}`;
+  modal.querySelector('#pdfModalFrame').src = url;
+}
+
+function closePdfModal() {
+  const modal = document.getElementById('pdfModal');
+  if (modal) {
+    modal.classList.remove('open');
+    modal.querySelector('#pdfModalFrame').src = 'about:blank';
+  }
+}
+
 function beginEditCell(td) {
   if (td.querySelector('input')) return;  // 이미 편집 중
   const tr = td.closest('tr');
@@ -2015,12 +2137,23 @@ function beginEditCell(td) {
   if (!item) return;
 
   const oldVal = item[key] || '';
-  td.innerHTML = `<input type="text" class="cell-edit-input" value="${
-    String(oldVal).replace(/"/g,'&quot;')
-  }" />`;
+  const hasPdfButton = !!PDF_FIELDS_TO_DOC[key];
+  td.innerHTML = `
+    <div style="display:flex;gap:4px;align-items:center;">
+      <input type="text" class="cell-edit-input" value="${String(oldVal).replace(/"/g,'&quot;')}" style="flex:1;" />
+      ${hasPdfButton ? `<button class="cell-edit-pdf-btn" type="button" title="PDF 보기" onmousedown="event.preventDefault()">📄</button>` : ''}
+    </div>`;
   const input = td.querySelector('input');
   input.focus();
   input.select();
+
+  if (hasPdfButton) {
+    td.querySelector('.cell-edit-pdf-btn').addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openPdfModalForField(pjt, key);
+    });
+  }
 
   const commit = (save) => {
     if (input.dataset.committed === '1') return;
